@@ -618,7 +618,7 @@ func (c *Client) DeleteKubeService(ctx context.Context, name string) error {
 	return trace.Wrap(err)
 }
 
-// DeleteAllKubeServices deletes all registered kubernetes types.
+// DeleteAllKubeServices deletes all registered kubernetes services.
 func (c *Client) DeleteAllKubeServices(ctx context.Context) error {
 	_, err := c.grpc.DeleteAllKubeServices(ctx, &proto.DeleteAllKubeServicesRequest{})
 	return trace.Wrap(err)
