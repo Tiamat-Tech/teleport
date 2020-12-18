@@ -1673,20 +1673,14 @@ func (a *Server) SetAccessRequestState(ctx context.Context, params services.Acce
 func (a *Server) GetAccessCapabilities(ctx context.Context, req services.AccessCapabilitiesRequest) (services.AccessCapabilities, error) {
 	var caps services.AccessCapabilities
 	if req.RequestableRoles {
-		// in order to determine which roles a user is allowed to request, we
-		// create a fake wildcard request and run validation with variable expansion
-		// turned on.
-		// TODO(fspmarshall): Refactor access request validation logic to allow
-		// calculating requestable roles more cleanly.
-		dummyReq, err := services.NewAccessRequest(req.User, services.Wildcard)
+		v, err := services.NewRequestValidator(a, req.User)
 		if err != nil {
 			return services.AccessCapabilities{}, trace.Wrap(err)
 		}
-		err = services.ValidateAccessRequest(a, dummyReq, services.ExpandRoles(true))
+		caps.RequestableRoles, err = v.GetRequestableRoles()
 		if err != nil {
 			return services.AccessCapabilities{}, trace.Wrap(err)
 		}
-		caps.RequestableRoles = dummyReq.GetRoles()
 	}
 	return caps, nil
 }
