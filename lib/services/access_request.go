@@ -528,8 +528,8 @@ func (m *RequestValidator) Validate(req AccessRequest) error {
 	return nil
 }
 
-// GetRequestableRoles gets the list of all existant roles which the user is
-// able to request.  This operation is expensive since it loads all existant
+// GetRequestableRoles gets the list of all existent roles which the user is
+// able to request.  This operation is expensive since it loads all existent
 // roles in order to determine the role list.  Prefer calling CanRequestRole
 // when checking againt a known role list.
 func (m *RequestValidator) GetRequestableRoles() ([]string, error) {

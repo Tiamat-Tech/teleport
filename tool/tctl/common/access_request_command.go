@@ -88,7 +88,7 @@ func (c *AccessRequestCommand) Initialize(app *kingpin.Application, config *serv
 	c.requestDelete = requests.Command("rm", "Delete an access request")
 	c.requestDelete.Arg("request-id", "ID of target request(s)").Required().StringVar(&c.reqIDs)
 
-	c.requestCaps = requests.Command("capabilities", "Check a user's access capabilites").Alias("caps").Hidden()
+	c.requestCaps = requests.Command("capabilities", "Check a user's access capabilities").Alias("caps").Hidden()
 	c.requestCaps.Arg("username", "Name of target user").Required().StringVar(&c.user)
 }
 
