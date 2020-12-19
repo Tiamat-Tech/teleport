@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	proto "github.com/gravitational/teleport/api/proto/auth"
+	proto "github.com/gravitational/teleport/api/auth"
 	"github.com/gravitational/teleport/lib/auth"
 	"github.com/gravitational/teleport/lib/client/identityfile"
 	"github.com/gravitational/teleport/lib/kube/kubeconfig"

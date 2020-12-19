@@ -37,7 +37,7 @@ import (
 
 	empty "github.com/golang/protobuf/ptypes/empty"
 	"github.com/gravitational/teleport"
-	proto "github.com/gravitational/teleport/api/proto/auth"
+	proto "github.com/gravitational/teleport/api/auth"
 	"github.com/gravitational/teleport/lib/backend"
 	"github.com/gravitational/teleport/lib/defaults"
 	"github.com/gravitational/teleport/lib/events"
@@ -2912,26 +2912,6 @@ func (s *TLSSuite) TestEventsClusterConfig(c *check.C) {
 	clusterNameResource, err = s.server.Auth().ClusterConfiguration.GetClusterName()
 	c.Assert(err, check.IsNil)
 	suite.ExpectResource(c, w, 3*time.Second, clusterNameResource)
-}
-
-func (s *TLSSuite) TestAPIBackwardsCompatibilityLogic(c *check.C) {
-	clt, err := s.server.NewClient(TestAdmin())
-	c.Assert(err, check.IsNil)
-
-	grpcMock := newMockAuthServiceClient()
-	clt.APIClient = proto.NewFromAuthServiceClient(grpcMock)
-
-	// check the REST endpoint gets called
-	grpcMock.err = trace.NotImplemented("")
-	err = clt.DeleteUser(context.TODO(), "not-existing-user")
-	c.Assert(trace.IsNotFound(err), check.Equals, true)
-	grpcMock.reset()
-
-	// check that any other error than "NotImplemented" returns right away
-	grpcMock.err = trace.BadParameter("test-other-error")
-	err = clt.DeleteUser(context.TODO(), "not-existing-user")
-	c.Assert(trace.IsBadParameter(err), check.Equals, true)
-	c.Assert(err, check.ErrorMatches, `test-other-error`)
 }
 
 // verifyJWT verifies that the token was signed by one the passed in key pair.
