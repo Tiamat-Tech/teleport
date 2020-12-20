@@ -2084,7 +2084,7 @@ func (c *Client) ValidateTrustedCluster(validateRequest *ValidateTrustedClusterR
 func (c *Client) CreateResetPasswordToken(ctx context.Context, req CreateResetPasswordTokenRequest) (services.ResetPasswordToken, error) {
 	return c.APIClient.CreateResetPasswordToken(ctx, proto.CreateResetPasswordTokenRequest{
 		Name: req.Name,
-		TTL:  req.TTL,
+		TTL:  proto.Duration(req.TTL),
 		Type: req.Type,
 	})
 }
