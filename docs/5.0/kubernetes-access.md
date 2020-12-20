@@ -12,6 +12,141 @@ Teleport handles SSO and provides a unified access plane for Kubernetes clusters
 * Admins can use roles to implement policies like `developers must not access production`.
 * Achieve compliance by capturing `kubectl` events and session recordings for `kubectl exec`.
 
+## SSO and Audit for Kubernetes in 5 steps with Teleport
+
+Set up single sign on, capture audit events and sessions with Teleport
+running in a Kubernetes cluster
+
+### Prerequisites
+
+* [Kubernetes](https://kubernetes.io) >= v1.14.0
+* [Helm](https://helm.sh) >= v3.2.0
+
+Verify that helm and kubernetes are installed and up to date.
+
+```bash
+$ helm version
+version.BuildInfo{Version:"v3.4.2", GitCommit:"23dd3af5e19a02d4f4baa5b2f242645a1a3af629", GitTreeState:"clean", GoVersion:"go1.14.13"}
+
+$ kubectl version
+Client Version: version.Info{Major:"1", Minor:"17+", GitVersion:"v1.17.16-rc.0", GitCommit:"737e2c461a2999fa242d39e77b9252d0eee7167e", GitTreeState:"clean", BuildDate:"2020-12-09T11:14:02Z", GoVersion:"go1.13.15", Compiler:"gc", Platform:"linux/amd64"}
+Server Version: version.Info{Major:"1", Minor:"17+", GitVersion:"v1.17.13-gke.2001", GitCommit:"00c919adfe4adf308bcd7c02838f2a1b60482f02", GitTreeState:"clean", BuildDate:"2020-11-06T18:24:02Z", GoVersion:"go1.13.15b4", Compiler:"gc", Platform:"linux/amd64"}
+```
+
+### U2F for Kubernetes (Step 1 out of 5)
+
+Let's install teleport on your Kubernetes cluster and set up second factor
+authentication for kubectl.
+
+=== "Community"
+
+```bash
+$ helm repo add teleport https://charts.releases.teleport.dev
+
+# Install teleport cluster. Set clusterName to unique hostname, for example teleport.example.com
+$ helm install --set clusterName=teleport-cluster --create-namespace --namespace=teleport-cluster ./teleport-cluster/
+
+NAME: teleport-cluster
+LAST DEPLOYED: Sat Dec 12 10:59:43 2020
+NAMESPACE: teleport-cluster
+STATUS: deployed
+```
+
+```bash
+$ kubectl config set-context --current --namespace=tele-cluster
+
+$ kubectl get services
+NAME               TYPE           CLUSTER-IP   EXTERNAL-IP      PORT(S)                        AGE
+teleport-cluster   LoadBalancer   10.4.4.73    104.199.126.88   443:31204/TCP,3026:32690/TCP   89s
+
+$ MYIP=$(kubectl get services teleport-cluster -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+$ echo $MYIP
+```
+
+```bash
+$ MYZONE="logicoma-dev"
+$ MYDNS="tele.logicoma.dev"
+
+$ gcloud dns record-sets transaction start --zone="$MYZONE"
+$ gcloud dns record-sets transaction add $MYIP --name="$MYDNS" --ttl="30" --type="A" --zone="$MYZONE"
+$ gcloud dns record-sets transaction add $MYIP --name="*.$MYDNS" --ttl="30" --type="A" --zone="$MYZONE"
+$ gcloud dns record-sets transaction describe --zone="$MYZONE"
+$ gcloud dns record-sets transaction execute --zone="$MYZONE"
+```
+
+```bash
+curl -s https://tele.logicoma.dev/webapi/ping | jq 
+{
+  "auth": {
+    "type": "local",
+    "second_factor": "otp"
+  },
+  "proxy": {
+    "kube": {
+      "enabled": true,
+      "listen_addr": "0.0.0.0:3026"
+    },
+    "ssh": {
+      "listen_addr": "0.0.0.0:3023",
+      "tunnel_listen_addr": "0.0.0.0:3024",
+      "public_addr": "tele.logicoma.dev:443"
+    }
+  },
+  "server_version": "5.0.0-dev",
+  "min_client_version": "3.0.0"
+}
+```
+
+Install https://goteleport.com/teleport/download/
+
+```bash
+$ POD=$(kubectl get po -l app=teleport-cluster -o jsonpath='{.items[0].metadata.name}')
+$ kubectl exec -ti $POD tctl status
+
+Cluster  tele.logicoma.dev
+Version  5.0.0-dev
+Host CA  never updated
+User CA  never updated
+Jwt CA   never updated
+CA pin   sha256:e44c22e6e45fdc70e195ee1e34a493ba6ad440a2778e8d62b576292afe40eff9
+```
+
+```bash
+$ kubectl exec -ti $POD tctl -- users add sasha --k8s-groups="system:masters"
+User "sasha" has been created but requires a password. Share this URL with the user to complete user setup, link is valid for 1h:
+https://tele.logicoma.dev:443/web/invite/e5de15a76cbc66c3bfbfe858542681fc
+
+NOTE: Make sure tele.logicoma.dev:443 points at a Teleport proxy which users can access.
+```
+
+```bash
+$ curl -L -O https://get.gravitational.com/teleport-v{{ teleport.version }}-linux-amd64-bin.tar.gz
+$ tar -xzf teleport-v{{ teleport.version }}-linux-amd64-bin.tar.gz
+$ sudo mv teleport/tsh /usr/local/bin/tsh
+$ sudo mv teleport/tctl /usr/local/bin/tctl
+
+```
+
+```bash
+$ tsh kube ls
+
+Kube Cluster Name Selected
+----------------- --------
+tele.logicoma.dev *
+
+$ tsh kube login tele.logicoma.dev
+```
+
+Success!
+
+### SSO for Kubernetes (step 1 out of 5)
+
+### 3/5 Configure audits and sessions backends  (step 1 out of 5)
+
+### 4/5 Configure backends
+
+### 5/5 Configure backends
+
 ## Teleport Kubernetes Service
 
 By default, the Kubernetes integration is turned off in Teleport. The configuration
