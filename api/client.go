@@ -681,7 +681,7 @@ const (
 )
 
 // getDelegator attempts to load the context value AccessRequestDelegator,
-// returning the empty string if mno value was found.
+// returning the empty string if no value was found.
 func GetDelegator(ctx context.Context) string {
 	delegator, ok := ctx.Value(ContextDelegator).(string)
 	if !ok {

@@ -527,7 +527,7 @@ const (
 	ContextClientAddr contextKey = "client-addr"
 )
 
-// Alias WithDelegator for backwards compatibility
+// WithDelegator alias for backwards compatibility
 var WithDelegator = api.WithDelegator
 
 // clientUsername returns the username of a remote HTTP client making the call.
