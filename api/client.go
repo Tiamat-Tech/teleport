@@ -193,12 +193,12 @@ func (c *Client) Ping(ctx context.Context) (proto.PingResponse, error) {
 }
 
 // UpsertNode is used by SSH servers to report their presence
-// to the auth servers in form of heartbeat expiring after ttl period.
-func (c *Client) UpsertNode(s services.Server) (*services.KeepAlive, error) {
+// to the auth servers in form of hearbeat expiring after ttl period.
+func (c *Client) UpsertNode(s types.Server) (*types.KeepAlive, error) {
 	if s.GetNamespace() == "" {
 		return nil, trace.BadParameter("missing node namespace")
 	}
-	protoServer, ok := s.(*services.ServerV2)
+	protoServer, ok := s.(*types.ServerV2)
 	if !ok {
 		return nil, trace.BadParameter("unsupported client")
 	}
@@ -209,20 +209,20 @@ func (c *Client) UpsertNode(s services.Server) (*services.KeepAlive, error) {
 	return keepAlive, nil
 }
 
-// UpdateRemoteCluster updates remote cluster from the specified value.
-func (c *Client) UpdateRemoteCluster(ctx context.Context, rc services.RemoteCluster) error {
-	rcV3, ok := rc.(*services.RemoteClusterV3)
-	if !ok {
-		return trace.BadParameter("unsupported remote cluster type %T", rcV3)
-	}
-
-	_, err := c.grpc.UpdateRemoteCluster(ctx, rcV3)
-	return trail.FromGRPC(err)
+// NewKeepAliver returns a new instance of keep aliver
+// run k.Close to release the keepAliver and its goroutines
+func (c *Client) NewKeepAliver(ctx context.Context) (types.KeepAliver, error) {
+	cancelCtx, cancel := context.WithCancel(ctx)
+	stream, err := c.grpc.SendKeepAlives(cancelCtx)
+	if err != nil {
+		cancel()
+		return nil, trail.FromGRPC(err)
 }
 
 // CreateUser creates a new user from the specified descriptor.
-func (c *Client) CreateUser(ctx context.Context, user services.User) error {
-	userV2, ok := user.(*services.UserV2)
+func (c *Client) CreateUser(ctx context.Context, user types.User) error {
+
+	userV2, ok := user.(*types.UserV2)
 	if !ok {
 		return trace.BadParameter("unsupported user type %T", user)
 	}
@@ -232,8 +232,9 @@ func (c *Client) CreateUser(ctx context.Context, user services.User) error {
 }
 
 // UpdateUser updates an existing user in a backend.
-func (c *Client) UpdateUser(ctx context.Context, user services.User) error {
-	userV2, ok := user.(*services.UserV2)
+func (c *Client) UpdateUser(ctx context.Context, user types.User) error {
+
+	userV2, ok := user.(*types.UserV2)
 	if !ok {
 		return trace.BadParameter("unsupported user type %T", user)
 	}
@@ -244,7 +245,7 @@ func (c *Client) UpdateUser(ctx context.Context, user services.User) error {
 
 // GetUser returns a list of usernames registered in the system.
 // withSecrets controls whether authentication details are returned.
-func (c *Client) GetUser(name string, withSecrets bool) (services.User, error) {
+func (c *Client) GetUser(name string, withSecrets bool) (types.User, error) {
 	if name == "" {
 		return nil, trace.BadParameter("missing username")
 	}
@@ -260,14 +261,14 @@ func (c *Client) GetUser(name string, withSecrets bool) (services.User, error) {
 
 // GetUsers returns a list of users.
 // withSecrets controls whether authentication details are returned.
-func (c *Client) GetUsers(withSecrets bool) ([]services.User, error) {
-	stream, err := c.grpc.GetUsers(context.TODO(), &proto.GetUsersRequest{
+func (c *Client) GetUsers(withSecrets bool) ([]types.User, error) {
+	stream, err := c.grpc.GetUsers(context.TODO(), &GetUsersRequest{
 		WithSecrets: withSecrets,
 	})
 	if err != nil {
 		return nil, trail.FromGRPC(err)
 	}
-	var users []services.User
+	var users []types.User
 	for {
 		user, err := stream.Recv()
 		if err != nil {
@@ -313,12 +314,12 @@ func (c *Client) EmitAuditEvent(ctx context.Context, event events.AuditEvent) er
 }
 
 // GetAccessRequests retrieves a list of all access requests matching the provided filter.
-func (c *Client) GetAccessRequests(ctx context.Context, filter services.AccessRequestFilter) ([]services.AccessRequest, error) {
+func (c *Client) GetAccessRequests(ctx context.Context, filter types.AccessRequestFilter) ([]types.AccessRequest, error) {
 	rsp, err := c.grpc.GetAccessRequests(ctx, &filter)
 	if err != nil {
 		return nil, trail.FromGRPC(err)
 	}
-	reqs := make([]services.AccessRequest, 0, len(rsp.AccessRequests))
+	reqs := make([]types.AccessRequest, 0, len(rsp.AccessRequests))
 	for _, req := range rsp.AccessRequests {
 		reqs = append(reqs, req)
 	}
@@ -326,8 +327,8 @@ func (c *Client) GetAccessRequests(ctx context.Context, filter services.AccessRe
 }
 
 // CreateAccessRequest registers a new access request with the auth server.
-func (c *Client) CreateAccessRequest(ctx context.Context, req services.AccessRequest) error {
-	r, ok := req.(*services.AccessRequestV3)
+func (c *Client) CreateAccessRequest(ctx context.Context, req types.AccessRequest) error {
+	r, ok := req.(*types.AccessRequestV3)
 	if !ok {
 		return trace.BadParameter("unexpected access request type %T", req)
 	}
@@ -340,8 +341,8 @@ func (c *Client) CreateAccessRequest(ctx context.Context, req services.AccessReq
 // This ensures that an attacker that gains the ResetPasswordToken link can not view it,
 // extract the OTP key from the QR code, then allow the user to signup with
 // the same OTP token.
-func (c *Client) RotateResetPasswordTokenSecrets(ctx context.Context, tokenID string) (services.ResetPasswordTokenSecrets, error) {
-	secrets, err := c.grpc.RotateResetPasswordTokenSecrets(ctx, &proto.RotateResetPasswordTokenSecretsRequest{
+func (c *Client) RotateResetPasswordTokenSecrets(ctx context.Context, tokenID string) (types.ResetPasswordTokenSecrets, error) {
+	secrets, err := c.grpc.RotateResetPasswordTokenSecrets(ctx, &RotateResetPasswordTokenSecretsRequest{
 		TokenID: tokenID,
 	})
 	if err != nil {
@@ -350,9 +351,9 @@ func (c *Client) RotateResetPasswordTokenSecrets(ctx context.Context, tokenID st
 	return secrets, nil
 }
 
-// GetResetPasswordToken returns a ResetPasswordtoken by tokenID.
-func (c *Client) GetResetPasswordToken(ctx context.Context, tokenID string) (services.ResetPasswordToken, error) {
-	token, err := c.grpc.GetResetPasswordToken(ctx, &proto.GetResetPasswordTokenRequest{
+// GetResetPasswordTokens returns all ResetPasswordTokens.
+func (c *Client) GetResetPasswordToken(ctx context.Context, tokenID string) (types.ResetPasswordToken, error) {
+	token, err := c.grpc.GetResetPasswordToken(ctx, &GetResetPasswordTokenRequest{
 		TokenID: tokenID,
 	})
 	if err != nil {
@@ -363,8 +364,8 @@ func (c *Client) GetResetPasswordToken(ctx context.Context, tokenID string) (ser
 }
 
 // CreateResetPasswordToken creates reset password token.
-func (c *Client) CreateResetPasswordToken(ctx context.Context, req *proto.CreateResetPasswordTokenRequest) (services.ResetPasswordToken, error) {
-	token, err := c.grpc.CreateResetPasswordToken(ctx, req)
+func (c *Client) CreateResetPasswordToken(ctx context.Context, req CreateResetPasswordTokenRequest) (types.ResetPasswordToken, error) {
+	token, err := c.grpc.CreateResetPasswordToken(ctx, &req)
 	if err != nil {
 		return nil, trail.FromGRPC(err)
 	}
@@ -379,8 +380,8 @@ func (c *Client) DeleteAccessRequest(ctx context.Context, reqID string) error {
 }
 
 // SetAccessRequestState updates the state of an existing access request.
-func (c *Client) SetAccessRequestState(ctx context.Context, params services.AccessRequestUpdate) error {
-	setter := proto.RequestStateSetter{
+func (c *Client) SetAccessRequestState(ctx context.Context, params types.AccessRequestUpdate) error {
+	setter := RequestStateSetter{
 		ID:          params.RequestID,
 		State:       params.State,
 		Reason:      params.Reason,
@@ -395,12 +396,12 @@ func (c *Client) SetAccessRequestState(ctx context.Context, params services.Acce
 }
 
 // GetPluginData loads all plugin data matching the supplied filter.
-func (c *Client) GetPluginData(ctx context.Context, filter services.PluginDataFilter) ([]services.PluginData, error) {
+func (c *Client) GetPluginData(ctx context.Context, filter types.PluginDataFilter) ([]types.PluginData, error) {
 	seq, err := c.grpc.GetPluginData(ctx, &filter)
 	if err != nil {
 		return nil, trail.FromGRPC(err)
 	}
-	data := make([]services.PluginData, 0, len(seq.PluginData))
+	data := make([]types.PluginData, 0, len(seq.PluginData))
 	for _, d := range seq.PluginData {
 		data = append(data, d)
 	}
@@ -408,13 +409,13 @@ func (c *Client) GetPluginData(ctx context.Context, filter services.PluginDataFi
 }
 
 // UpdatePluginData updates a per-resource PluginData entry.
-func (c *Client) UpdatePluginData(ctx context.Context, params services.PluginDataUpdateParams) error {
+func (c *Client) UpdatePluginData(ctx context.Context, params types.PluginDataUpdateParams) error {
 	_, err := c.grpc.UpdatePluginData(ctx, &params)
 	return trail.FromGRPC(err)
 }
 
 // AcquireSemaphore acquires lease with requested resources from semaphore.
-func (c *Client) AcquireSemaphore(ctx context.Context, params services.AcquireSemaphoreRequest) (*services.SemaphoreLease, error) {
+func (c *Client) AcquireSemaphore(ctx context.Context, params types.AcquireSemaphoreRequest) (*types.SemaphoreLease, error) {
 	lease, err := c.grpc.AcquireSemaphore(ctx, &params)
 	if err != nil {
 		return nil, trail.FromGRPC(err)
@@ -423,24 +424,24 @@ func (c *Client) AcquireSemaphore(ctx context.Context, params services.AcquireSe
 }
 
 // KeepAliveSemaphoreLease updates semaphore lease.
-func (c *Client) KeepAliveSemaphoreLease(ctx context.Context, lease services.SemaphoreLease) error {
+func (c *Client) KeepAliveSemaphoreLease(ctx context.Context, lease types.SemaphoreLease) error {
 	_, err := c.grpc.KeepAliveSemaphoreLease(ctx, &lease)
 	return trail.FromGRPC(err)
 }
 
 // CancelSemaphoreLease cancels semaphore lease early.
-func (c *Client) CancelSemaphoreLease(ctx context.Context, lease services.SemaphoreLease) error {
+func (c *Client) CancelSemaphoreLease(ctx context.Context, lease types.SemaphoreLease) error {
 	_, err := c.grpc.CancelSemaphoreLease(ctx, &lease)
 	return trail.FromGRPC(err)
 }
 
 // GetSemaphores returns a list of all semaphores matching the supplied filter.
-func (c *Client) GetSemaphores(ctx context.Context, filter services.SemaphoreFilter) ([]services.Semaphore, error) {
+func (c *Client) GetSemaphores(ctx context.Context, filter types.SemaphoreFilter) ([]types.Semaphore, error) {
 	rsp, err := c.grpc.GetSemaphores(ctx, &filter)
 	if err != nil {
 		return nil, trail.FromGRPC(err)
 	}
-	sems := make([]services.Semaphore, 0, len(rsp.Semaphores))
+	sems := make([]types.Semaphore, 0, len(rsp.Semaphores))
 	for _, s := range rsp.Semaphores {
 		sems = append(sems, s)
 	}
@@ -448,17 +449,17 @@ func (c *Client) GetSemaphores(ctx context.Context, filter services.SemaphoreFil
 }
 
 // DeleteSemaphore deletes a semaphore matching the supplied filter.
-func (c *Client) DeleteSemaphore(ctx context.Context, filter services.SemaphoreFilter) error {
+func (c *Client) DeleteSemaphore(ctx context.Context, filter types.SemaphoreFilter) error {
 	_, err := c.grpc.DeleteSemaphore(ctx, &filter)
 	return trail.FromGRPC(err)
 }
 
 // UpsertKubeService is used by kubernetes services to report their presence
 // to other auth servers in form of hearbeat expiring after ttl period.
-func (c *Client) UpsertKubeService(ctx context.Context, s services.Server) error {
-	server, ok := s.(*services.ServerV2)
+func (c *Client) UpsertKubeService(ctx context.Context, s types.Server) error {
+	server, ok := s.(*types.ServerV2)
 	if !ok {
-		return trace.BadParameter("invalid type %T, expected *services.ServerV2", server)
+		return trace.BadParameter("invalid type %T, expected *types.ServerV2", server)
 	}
 	_, err := c.grpc.UpsertKubeService(ctx, &proto.UpsertKubeServiceRequest{
 		Server: server,
@@ -468,13 +469,13 @@ func (c *Client) UpsertKubeService(ctx context.Context, s services.Server) error
 
 // GetKubeServices returns the list of kubernetes services registered in the
 // cluster.
-func (c *Client) GetKubeServices(ctx context.Context) ([]services.Server, error) {
-	resp, err := c.grpc.GetKubeServices(ctx, &proto.GetKubeServicesRequest{})
+func (c *Client) GetKubeServices(ctx context.Context) ([]types.Server, error) {
+	resp, err := c.grpc.GetKubeServices(ctx, &GetKubeServicesRequest{})
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
 
-	var servers []services.Server
+	var servers []types.Server
 	for _, server := range resp.GetServers() {
 		servers = append(servers, server)
 	}
@@ -482,8 +483,8 @@ func (c *Client) GetKubeServices(ctx context.Context) ([]services.Server, error)
 }
 
 // GetAppServers gets all application servers.
-func (c *Client) GetAppServers(ctx context.Context, namespace string, opts ...services.MarshalOption) ([]services.Server, error) {
-	cfg, err := services.CollectOptions(opts)
+func (c *Client) GetAppServers(ctx context.Context, namespace string, opts ...types.MarshalOption) ([]types.Server, error) {
+	cfg, err := types.CollectOptions(opts)
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
@@ -496,7 +497,7 @@ func (c *Client) GetAppServers(ctx context.Context, namespace string, opts ...se
 		return nil, trail.FromGRPC(err)
 	}
 
-	var servers []services.Server
+	var servers []types.Server
 	for _, server := range resp.GetServers() {
 		servers = append(servers, server)
 	}
@@ -505,8 +506,8 @@ func (c *Client) GetAppServers(ctx context.Context, namespace string, opts ...se
 }
 
 // UpsertAppServer adds an application server.
-func (c *Client) UpsertAppServer(ctx context.Context, server services.Server) (*services.KeepAlive, error) {
-	s, ok := server.(*services.ServerV2)
+func (c *Client) UpsertAppServer(ctx context.Context, server types.Server) (*types.KeepAlive, error) {
+	s, ok := server.(*types.ServerV2)
 	if !ok {
 		return nil, trace.BadParameter("invalid type %T", server)
 	}
@@ -538,8 +539,8 @@ func (c *Client) DeleteAllAppServers(ctx context.Context, namespace string) erro
 }
 
 // GetAppSession gets an application web session.
-func (c *Client) GetAppSession(ctx context.Context, req services.GetAppSessionRequest) (services.WebSession, error) {
-	resp, err := c.grpc.GetAppSession(ctx, &proto.GetAppSessionRequest{
+func (c *Client) GetAppSession(ctx context.Context, req types.GetAppSessionRequest) (types.WebSession, error) {
+	resp, err := c.grpc.GetAppSession(ctx, &GetAppSessionRequest{
 		SessionID: req.SessionID,
 	})
 	if err != nil {
@@ -550,13 +551,13 @@ func (c *Client) GetAppSession(ctx context.Context, req services.GetAppSessionRe
 }
 
 // GetAppSessions gets all application web sessions.
-func (c *Client) GetAppSessions(ctx context.Context) ([]services.WebSession, error) {
+func (c *Client) GetAppSessions(ctx context.Context) ([]types.WebSession, error) {
 	resp, err := c.grpc.GetAppSessions(ctx, &empty.Empty{})
 	if err != nil {
 		return nil, trail.FromGRPC(err)
 	}
 
-	out := make([]services.WebSession, 0, len(resp.GetSessions()))
+	out := make([]types.WebSession, 0, len(resp.GetSessions()))
 	for _, v := range resp.GetSessions() {
 		out = append(out, v)
 	}
@@ -565,8 +566,8 @@ func (c *Client) GetAppSessions(ctx context.Context) ([]services.WebSession, err
 
 // CreateAppSession creates an application web session. Application web
 // sessions represent a browser session the client holds.
-func (c *Client) CreateAppSession(ctx context.Context, req services.CreateAppSessionRequest) (services.WebSession, error) {
-	resp, err := c.grpc.CreateAppSession(ctx, &proto.CreateAppSessionRequest{
+func (c *Client) CreateAppSession(ctx context.Context, req types.CreateAppSessionRequest) (types.WebSession, error) {
+	resp, err := c.grpc.CreateAppSession(ctx, &CreateAppSessionRequest{
 		Username:      req.Username,
 		ParentSession: req.ParentSession,
 		PublicAddr:    req.PublicAddr,
@@ -580,7 +581,7 @@ func (c *Client) CreateAppSession(ctx context.Context, req services.CreateAppSes
 }
 
 // DeleteAppSession removes an application web session.
-func (c *Client) DeleteAppSession(ctx context.Context, req services.DeleteAppSessionRequest) error {
+func (c *Client) DeleteAppSession(ctx context.Context, req types.DeleteAppSessionRequest) error {
 
 	_, err := c.grpc.DeleteAppSession(ctx, &proto.DeleteAppSessionRequest{
 		SessionID: req.SessionID,
@@ -617,7 +618,7 @@ func (c *Client) DeleteKubeService(ctx context.Context, name string) error {
 	return trace.Wrap(err)
 }
 
-// DeleteAllKubeServices deletes all registered kubernetes services.
+// DeleteAllKubeServices deletes all registered kubernetes types.
 func (c *Client) DeleteAllKubeServices(ctx context.Context) error {
 	_, err := c.grpc.DeleteAllKubeServices(ctx, &proto.DeleteAllKubeServicesRequest{})
 	return trace.Wrap(err)
