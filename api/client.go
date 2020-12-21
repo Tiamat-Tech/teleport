@@ -109,7 +109,6 @@ func (c *Config) CheckAndSetDefaults() error {
 }
 
 // TLSConfig returns the TLS config used by the client.
-// It could return nil if the client is not using TLS
 func (c *Client) TLSConfig() *tls.Config {
 	return c.c.TLS
 }
@@ -683,12 +682,19 @@ const (
 
 // getDelegator attempts to load the context value AccessRequestDelegator,
 // returning the empty string if mno value was found.
-func getDelegator(ctx context.Context) string {
+func GetDelegator(ctx context.Context) string {
 	delegator, ok := ctx.Value(ContextDelegator).(string)
 	if !ok {
 		return ""
 	}
 	return delegator
+}
+
+// WithDelegator creates a child context with the AccessRequestDelegator
+// value set.  Optionally used by AuthServer.SetAccessRequestState to log
+// a delegating identity.
+func WithDelegator(ctx context.Context, delegator string) context.Context {
+	return context.WithValue(ctx, ContextDelegator, delegator)
 }
 
 // SetAccessRequestState updates the state of an existing access request.
@@ -700,7 +706,7 @@ func (c *Client) SetAccessRequestState(ctx context.Context, params services.Acce
 		Annotations: params.Annotations,
 		Roles:       params.Roles,
 	}
-	if d := getDelegator(ctx); d != "" {
+	if d := GetDelegator(ctx); d != "" {
 		setter.Delegator = d
 	}
 	_, err := c.grpc.SetAccessRequestState(ctx, &setter)

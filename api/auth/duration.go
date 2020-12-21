@@ -19,7 +19,7 @@ import (
 	"time"
 )
 
-// Duration is a wrapper around duration to set up custom marshal/unmarshal
+// Duration is a wrapper around duration
 type Duration time.Duration
 
 // Get returns time.Duration value
