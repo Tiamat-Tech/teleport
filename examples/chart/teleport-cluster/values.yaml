@@ -15,10 +15,13 @@ clusterName:
 teleportVersionOverride: ""
 
 # ACME is a protocol for getting certificates
-# acmeEnabled enables acme protocol
-acmeEnabled: false
+# acme enables acme protocol
+acme: false
 acmeEmail: ""
 acmeURI: ""
+
+# Set enterprise to true to use enterprise image
+enterprise: false
 
 ##################################################
 # Values that you shouldn't need to change.
@@ -26,6 +29,8 @@ acmeURI: ""
 
 # Container image for the agent.
 image: quay.io/gravitational/teleport
+# Enterprise version of the image
+enterpriseImage: quay.io/gravitational/teleport-ent
 # Number of replicas for the agent deployment.
 replicaCount: 1
 # Name of the ClusterRole, used by the agent's service account.

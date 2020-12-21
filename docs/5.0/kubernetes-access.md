@@ -5,17 +5,17 @@ description: How to set up and configure Teleport for Kubernetes access with SSO
 
 # Teleport Kubernetes Access
 
-Teleport handles SSO and provides a unified access plane for Kubernetes clusters.
+Teleport provides a unified access plane for Kubernetes clusters.
 
-* Users can login once using [`tsh login`](cli-docs.md#tsh-login) and
-  switch between multiple clusters using [`tsh kube login`](cli-docs.md#tsh-kube-login).
-* Admins can use roles to implement policies like `developers must not access production`.
+* Users can login once using SSO and switch between clusters without relogins.
+* Admins can use roles to implement policies like `developers must not access production` and require
+dual authorization using [access workflows](./enteprise/workflow.md).
 * Achieve compliance by capturing `kubectl` events and session recordings for `kubectl exec`.
 
 ## SSO and Audit for Kubernetes in 5 steps with Teleport
 
 Set up single sign on, capture audit events and sessions with Teleport
-running in a Kubernetes cluster
+running in a Kubernetes cluster.
 
 ### Prerequisites
 
@@ -26,115 +26,250 @@ Verify that helm and kubernetes are installed and up to date.
 
 ```bash
 $ helm version
-version.BuildInfo{Version:"v3.4.2", GitCommit:"23dd3af5e19a02d4f4baa5b2f242645a1a3af629", GitTreeState:"clean", GoVersion:"go1.14.13"}
+version.BuildInfo{Version:"v3.4.2"}
 
 $ kubectl version
-Client Version: version.Info{Major:"1", Minor:"17+", GitVersion:"v1.17.16-rc.0", GitCommit:"737e2c461a2999fa242d39e77b9252d0eee7167e", GitTreeState:"clean", BuildDate:"2020-12-09T11:14:02Z", GoVersion:"go1.13.15", Compiler:"gc", Platform:"linux/amd64"}
-Server Version: version.Info{Major:"1", Minor:"17+", GitVersion:"v1.17.13-gke.2001", GitCommit:"00c919adfe4adf308bcd7c02838f2a1b60482f02", GitTreeState:"clean", BuildDate:"2020-11-06T18:24:02Z", GoVersion:"go1.13.15b4", Compiler:"gc", Platform:"linux/amd64"}
+Client Version: version.Info{Major:"1", Minor:"17+"}
+Server Version: version.Info{Major:"1", Minor:"17+"}
 ```
 
-### U2F for Kubernetes (Step 1 out of 5)
+### Install Teleport (Step 1 out of 5)
 
-Let's install teleport on your Kubernetes cluster and set up second factor
-authentication for kubectl.
+Install teleport on your Kubernetes cluster and set up two factor
+authentication for `kubectl`.
 
-=== "Community"
+=== "Open Source"
+
+    ```bash
+    $ helm repo add teleport https://charts.releases.teleport.dev
+
+    # Install a single node teleport cluster and provision a cert using ACME.
+    # Set clusterName to unique hostname, for example teleport.example.com
+    $ helm install teleport-cluster --create-namespace --namespace=teleport-cluster \
+      --set clusterName=${CLUSTER_NAME?} --set acme=true --set acmeEmail=${EMAIL}
+    
+    NAME: teleport-cluster
+    LAST DEPLOYED: Sat Dec 12 10:59:43 2020
+    NAMESPACE: teleport-cluster
+    STATUS: deployed
+    ```
+    
+=== "Enterprise"
+
+    ```bash
+    $ helm repo add teleport https://charts.releases.teleport.dev
+    
+    # Install a single node teleport cluster and provision a cert using ACME.
+    # Set clusterName to unique hostname, for example teleport.example.com
+    $ helm install teleport-cluster --create-namespace --namespace=teleport-cluster \
+      --set clusterName=${CLUSTER_NAME?} --set acme=true --set acmeEmail=${EMAIL}
+    
+    NAME: teleport-cluster
+    LAST DEPLOYED: Sat Dec 12 10:59:43 2020
+    NAMESPACE: teleport-cluster
+    STATUS: deployed
+    ```
+
+Verify that the service is up and running.
 
 ```bash
-$ helm repo add teleport https://charts.releases.teleport.dev
+# Set kubectl context to the namespace to set some typing
+$ kubectl config set-context --current --namespace=teleport-cluster
 
-# Install teleport cluster. Set clusterName to unique hostname, for example teleport.example.com
-$ helm install --set clusterName=teleport-cluster --create-namespace --namespace=teleport-cluster ./teleport-cluster/
-
-NAME: teleport-cluster
-LAST DEPLOYED: Sat Dec 12 10:59:43 2020
-NAMESPACE: teleport-cluster
-STATUS: deployed
-```
-
-```bash
-$ kubectl config set-context --current --namespace=tele-cluster
-
+# Service is up, load balancer is created
 $ kubectl get services
 NAME               TYPE           CLUSTER-IP   EXTERNAL-IP      PORT(S)                        AGE
 teleport-cluster   LoadBalancer   10.4.4.73    104.199.126.88   443:31204/TCP,3026:32690/TCP   89s
 
+# Save the pod IP. If the IP is not available, check the pod and load balancer status.
 $ MYIP=$(kubectl get services teleport-cluster -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
 $ echo $MYIP
+192.168.2.1
 ```
+
+Set up two `A` DNS records - `tele.example.com` for UI and `*.tele.example.com`
+for web apps using [application access](./application-access.md).
+
+=== "Google DNS"
+
+    ```bash
+    $ MYZONE="myzone"
+    $ MYDNS="tele.example.com"
+    
+    $ gcloud dns record-sets transaction start --zone="${MYZONE}"
+    $ gcloud dns record-sets transaction add ${MYIP?} --name="${MYDNS?}" --ttl="30" --type="A" --zone="${MYZONE?}"
+    $ gcloud dns record-sets transaction add ${MYIP?} --name="*.${MYDNS?}" --ttl="30" --type="A" --zone="${MYZONE?}"
+    $ gcloud dns record-sets transaction describe --zone="${MYZONE?}"
+    $ gcloud dns record-sets transaction execute --zone="${MYZONE?}"
+    ```
+
+The first request to Teleport's API will take a bit longer, it gets
+a cert from [Letsencrypt](https://letsencrypt.org).
+
+If all is good, Teleport will respond back with discovery info:
 
 ```bash
-$ MYZONE="logicoma-dev"
-$ MYDNS="tele.logicoma.dev"
+$ curl https://tele.example.com/webapi/ping
 
-$ gcloud dns record-sets transaction start --zone="$MYZONE"
-$ gcloud dns record-sets transaction add $MYIP --name="$MYDNS" --ttl="30" --type="A" --zone="$MYZONE"
-$ gcloud dns record-sets transaction add $MYIP --name="*.$MYDNS" --ttl="30" --type="A" --zone="$MYZONE"
-$ gcloud dns record-sets transaction describe --zone="$MYZONE"
-$ gcloud dns record-sets transaction execute --zone="$MYZONE"
+{"server_version":"5.0.0-dev","min_client_version":"3.0.0"}
 ```
 
-```bash
-curl -s https://tele.logicoma.dev/webapi/ping | jq 
-{
-  "auth": {
-    "type": "local",
-    "second_factor": "otp"
-  },
-  "proxy": {
-    "kube": {
-      "enabled": true,
-      "listen_addr": "0.0.0.0:3026"
-    },
-    "ssh": {
-      "listen_addr": "0.0.0.0:3023",
-      "tunnel_listen_addr": "0.0.0.0:3024",
-      "public_addr": "tele.logicoma.dev:443"
-    }
-  },
-  "server_version": "5.0.0-dev",
-  "min_client_version": "3.0.0"
-}
-```
+### Create a local admin user (Step 2 out of 5)
 
-Install https://goteleport.com/teleport/download/
+Local users are helpful when SSO provider is down.
+
+You can skip adding a local user and instead set up 
+
+To create a local user, we are going to run Teleport's admin tool `tctl` from the Pod.
+Verify that we can access `tctl`.
 
 ```bash
 $ POD=$(kubectl get po -l app=teleport-cluster -o jsonpath='{.items[0].metadata.name}')
-$ kubectl exec -ti $POD tctl status
+$ kubectl exec -ti ${POD?} tctl status
 
-Cluster  tele.logicoma.dev
-Version  5.0.0-dev
+Cluster  tele.example.com
+Version  {{teleport.version}}
 Host CA  never updated
 User CA  never updated
 Jwt CA   never updated
 CA pin   sha256:e44c22e6e45fdc70e195ee1e34a493ba6ad440a2778e8d62b576292afe40eff9
 ```
 
-```bash
-$ kubectl exec -ti $POD tctl -- users add sasha --k8s-groups="system:masters"
-User "sasha" has been created but requires a password. Share this URL with the user to complete user setup, link is valid for 1h:
-https://tele.logicoma.dev:443/web/invite/e5de15a76cbc66c3bfbfe858542681fc
+Local users are great fallback when SSO provider is down. Let's create a local
+admin user `alice` who has access to Kubernetes group `system:masters`.
 
-NOTE: Make sure tele.logicoma.dev:443 points at a Teleport proxy which users can access.
+Follow the link to create a strong password and set up a second factor authentication.
+
+=== "Open Source"
+
+    ```bash
+    $ kubectl exec -ti $POD tctl -- users add alice --k8s-groups="system:masters"
+    
+    User "alice" has been created but requires a password. Share this URL with the user to complete user setup, link is valid for 1h:
+    https://tele.example.com:443/web/invite/random-token-id-goes-here
+    
+    NOTE: Make sure tele.example.com:443 points at a Teleport proxy which users can access.
+    ```
+
+=== "Enterprise"
+
+    ```bash
+    $ kubectl exec -ti $POD tctl -- users add alice --roles="system:masters"
+    
+    User "alice" has been created but requires a password. Share this URL with the user to complete user setup, link is valid for 1h:
+    https://tele.example.com:443/web/invite/random-token-id-goes-here
+    
+    NOTE: Make sure tele.example.com:443 points at a Teleport proxy which users can access.
+    ```
+
+### Create a local admin user (Step 2 out of 5)
+
+Local users are helpful when SSO provider is down.
+
+You can skip adding a local user and instead set up 
+
+To create a local user, we are going to run Teleport's admin tool `tctl` from the Pod.
+Verify that we can access `tctl`.
+
+```bash
+$ POD=$(kubectl get po -l app=teleport-cluster -o jsonpath='{.items[0].metadata.name}')
+$ kubectl exec -ti ${POD?} tctl status
+
+Cluster  tele.example.com
+Version  {{teleport.version}}
+Host CA  never updated
+User CA  never updated
+Jwt CA   never updated
+CA pin   sha256:e44c22e6e45fdc70e195ee1e34a493ba6ad440a2778e8d62b576292afe40eff9
 ```
 
-```bash
-$ curl -L -O https://get.gravitational.com/teleport-v{{ teleport.version }}-linux-amd64-bin.tar.gz
-$ tar -xzf teleport-v{{ teleport.version }}-linux-amd64-bin.tar.gz
-$ sudo mv teleport/tsh /usr/local/bin/tsh
-$ sudo mv teleport/tctl /usr/local/bin/tctl
+Local users are great fallback when SSO provider is down. Let's create a local
+admin user `alice` who has access to Kubernetes group `system:masters`.
 
+Follow the link to create a strong password and set up a second factor authentication.
+
+=== "Open Source"
+
+    ```bash
+    $ kubectl exec -ti ${POD?} tctl -- users add alice --k8s-groups="system:masters"
+    
+    User "alice" has been created but requires a password. Share this URL with the user to complete user setup, link is valid for 1h:
+    https://tele.example.com:443/web/invite/random-token-id-goes-here
+    
+    NOTE: Make sure tele.example.com:443 points at a Teleport proxy which users can access.
+    ```
+
+=== "Enterprise"
+
+    ```bash
+    $ kubectl exec -ti ${POD?} tctl -- users add alice --roles="system:masters"
+    
+    User "alice" has been created but requires a password. Share this URL with the user to complete user setup, link is valid for 1h:
+    https://tele.example.com:443/web/invite/random-token-id-goes-here
+    
+    NOTE: Make sure tele.example.com:443 points at a Teleport proxy which users can access.
+    ```
+
+Let's install `tsh` and `tctl` on Linux.
+For other install options, check out [install guide](./installation.md)
+
+=== "Open Source"
+
+    ```bash
+    $ curl -L -O https://get.gravitational.com/teleport-v{{ teleport.version }}-linux-amd64-bin.tar.gz
+    $ tar -xzf teleport-v{{ teleport.version }}-linux-amd64-bin.tar.gz
+    $ sudo mv teleport/tsh /usr/local/bin/tsh
+    $ sudo mv teleport/tctl /usr/local/bin/tctl
+    ```
+
+=== "Enterprise"
+
+    ```bash
+    $ curl -L -O https://get.gravitational.com/teleport-ent-v{{ teleport.version }}-linux-amd64-bin.tar.gz
+    $ tar -xzf teleport-ent-v{{ teleport.version }}-linux-amd64-bin.tar.gz
+    $ sudo mv teleport/tsh /usr/local/bin/tsh
+    $ sudo mv teleport/tctl /usr/local/bin/tctl
+    ```
+
+Try `tsh login` with a local user. Use a custom kubeconfig to prevent override
+of the default one in case if there is a problem.
+
+```bash
+$ KUBECONFIG=${HOME?}/teleport.yaml tsh login --proxy=tele.example.com:443
+
+Enter password for Teleport user alice:
+Enter your OTP token:
+1111111
+> Profile URL:        https://tele.example.com:443
+  Logged in as:       sasha
+  Cluster:            tele.example.com
+  Roles:              admin*
+  Logins:             sasha
+  Kubernetes:         enabled
+  Kubernetes cluster: "tele.example.com"
+  Kubernetes users:   sasha
+  Kubernetes groups:  system:masters
+  Valid until:        2020-12-21 08:05:28 -0800 PST [valid for 12h0m0s]
+  Extensions:         permit-agent-forwarding, permit-port-forwarding, permit-pty
+
+
+* RBAC is only available in Teleport Enterprise
+  https://goteleport.com/teleport/docs/enterprise
 ```
+
+Teleport issuesd a short-lived 12 hour certificate and updated kubernetes
+configuration.
 
 ```bash
 $ tsh kube ls
 
 Kube Cluster Name Selected
 ----------------- --------
-tele.logicoma.dev *
+tele.example.com  *
 
-$ tsh kube login tele.logicoma.dev
+$ KUBECONFIG=${HOME?}/teleport.yaml kubectl get -n teleport-cluster pods
+NAME                                READY   STATUS    RESTARTS   AGE
+teleport-cluster-6c9b88fd8f-glmhf   1/1     Running   0          127m
 ```
 
 Success!
