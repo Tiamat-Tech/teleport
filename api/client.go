@@ -27,16 +27,18 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/golang/protobuf/ptypes/empty"
+	"golang.org/x/net/http2"
+
 	"github.com/gravitational/teleport"
-	"github.com/gravitational/teleport/api/auth"
+	"github.com/gravitational/teleport/api/proto"
 	"github.com/gravitational/teleport/lib/events"
 	"github.com/gravitational/teleport/lib/jwt"
 	"github.com/gravitational/teleport/lib/services"
 	"github.com/gravitational/teleport/lib/session"
 	"github.com/gravitational/trace"
 	"github.com/gravitational/trace/trail"
-	"golang.org/x/net/http2"
+
+	"github.com/golang/protobuf/ptypes/empty"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	ggzip "google.golang.org/grpc/encoding/gzip"
@@ -44,6 +46,8 @@ import (
 )
 
 func init() {
+	// gzip is used for gRPC auditStream compression. SetLevel changes the
+	// compression level, must be called in initialization, and is not thread safe.
 	if err := ggzip.SetLevel(gzip.BestSpeed); err != nil {
 		panic(err)
 	}
@@ -51,10 +55,12 @@ func init() {
 
 // Client is a gRPC Client that connects to a teleport auth server through TLS.
 type Client struct {
-	c    Config
-	grpc auth.AuthServiceClient
+	c Config
+	// grpc is the gRPC client specification for the auth server.
+	grpc proto.AuthServiceClient
+	// conn is a grpc connection to the auth server.
 	conn *grpc.ClientConn
-	// closedFlag is set to indicate that the services are closed
+	// closedFlag is set to indicate that the services are closed.
 	closedFlag int32
 }
 
@@ -148,7 +154,7 @@ func NewClient(cfg Config) (*Client, error) {
 		return nil, trail.FromGRPC(err)
 	}
 
-	c.grpc = auth.NewAuthServiceClient(c.conn)
+	c.grpc = proto.NewAuthServiceClient(c.conn)
 	return c, nil
 }
 
@@ -175,10 +181,10 @@ func (c *Client) setClosed() bool {
 }
 
 // Ping gets basic info about the auth server.
-func (c *Client) Ping(ctx context.Context) (auth.PingResponse, error) {
-	rsp, err := c.grpc.Ping(ctx, &auth.PingRequest{})
+func (c *Client) Ping(ctx context.Context) (proto.PingResponse, error) {
+	rsp, err := c.grpc.Ping(ctx, &proto.PingRequest{})
 	if err != nil {
-		return auth.PingResponse{}, trail.FromGRPC(err)
+		return proto.PingResponse{}, trail.FromGRPC(err)
 	}
 	return *rsp, nil
 }
@@ -222,7 +228,7 @@ func (c *Client) NewKeepAliver(ctx context.Context) (services.KeepAliver, error)
 
 type streamKeepAliver struct {
 	mu          sync.RWMutex
-	stream      auth.AuthService_SendKeepAlivesClient
+	stream      proto.AuthService_SendKeepAlivesClient
 	ctx         context.Context
 	cancel      context.CancelFunc
 	keepAlivesC chan services.KeepAlive
@@ -284,9 +290,9 @@ func (k *streamKeepAliver) Close() error {
 // NewWatcher returns a new streamWatcher
 func (c *Client) NewWatcher(ctx context.Context, watch services.Watch) (services.Watcher, error) {
 	cancelCtx, cancel := context.WithCancel(ctx)
-	var protoWatch auth.Watch
+	var protoWatch proto.Watch
 	for _, k := range watch.Kinds {
-		protoWatch.Kinds = append(protoWatch.Kinds, auth.WatchKind{
+		protoWatch.Kinds = append(protoWatch.Kinds, proto.WatchKind{
 			Name:        k.Name,
 			Kind:        k.Kind,
 			LoadSecrets: k.LoadSecrets,
@@ -310,7 +316,7 @@ func (c *Client) NewWatcher(ctx context.Context, watch services.Watch) (services
 
 type streamWatcher struct {
 	mu      sync.RWMutex
-	stream  auth.AuthService_WatchEventsClient
+	stream  proto.AuthService_WatchEventsClient
 	ctx     context.Context
 	cancel  context.CancelFunc
 	eventsC chan services.Event
@@ -372,7 +378,6 @@ func (w *streamWatcher) Close() error {
 
 // UpdateRemoteCluster updates remote cluster from the specified value.
 func (c *Client) UpdateRemoteCluster(ctx context.Context, rc services.RemoteCluster) error {
-
 	rcV3, ok := rc.(*services.RemoteClusterV3)
 	if !ok {
 		return trace.BadParameter("unsupported remote cluster type %T", rcV3)
@@ -384,7 +389,6 @@ func (c *Client) UpdateRemoteCluster(ctx context.Context, rc services.RemoteClus
 
 // CreateUser creates a new user from the specified descriptor.
 func (c *Client) CreateUser(ctx context.Context, user services.User) error {
-
 	userV2, ok := user.(*services.UserV2)
 	if !ok {
 		return trace.BadParameter("unsupported user type %T", user)
@@ -396,7 +400,6 @@ func (c *Client) CreateUser(ctx context.Context, user services.User) error {
 
 // UpdateUser updates an existing user in a backend.
 func (c *Client) UpdateUser(ctx context.Context, user services.User) error {
-
 	userV2, ok := user.(*services.UserV2)
 	if !ok {
 		return trace.BadParameter("unsupported user type %T", user)
@@ -412,7 +415,7 @@ func (c *Client) GetUser(name string, withSecrets bool) (services.User, error) {
 	if name == "" {
 		return nil, trace.BadParameter("missing username")
 	}
-	user, err := c.grpc.GetUser(context.TODO(), &auth.GetUserRequest{
+	user, err := c.grpc.GetUser(context.TODO(), &proto.GetUserRequest{
 		Name:        name,
 		WithSecrets: withSecrets,
 	})
@@ -425,7 +428,7 @@ func (c *Client) GetUser(name string, withSecrets bool) (services.User, error) {
 // GetUsers returns a list of users.
 // withSecrets controls whether authentication details are returned.
 func (c *Client) GetUsers(withSecrets bool) ([]services.User, error) {
-	stream, err := c.grpc.GetUsers(context.TODO(), &auth.GetUsersRequest{
+	stream, err := c.grpc.GetUsers(context.TODO(), &proto.GetUsersRequest{
 		WithSecrets: withSecrets,
 	})
 	if err != nil {
@@ -447,7 +450,7 @@ func (c *Client) GetUsers(withSecrets bool) ([]services.User, error) {
 
 // DeleteUser deletes a user by name.
 func (c *Client) DeleteUser(ctx context.Context, user string) error {
-	req := &auth.DeleteUserRequest{Name: user}
+	req := &proto.DeleteUserRequest{Name: user}
 	_, err := c.grpc.DeleteUser(ctx, req)
 	return trail.FromGRPC(err)
 }
@@ -455,7 +458,7 @@ func (c *Client) DeleteUser(ctx context.Context, user string) error {
 // GenerateUserCerts takes the public key in the OpenSSH `authorized_keys` plain
 // text format, signs it using User Certificate Authority signing key and
 // returns the resulting certificates.
-func (c *Client) GenerateUserCerts(ctx context.Context, req auth.UserCertsRequest) (*auth.Certs, error) {
+func (c *Client) GenerateUserCerts(ctx context.Context, req proto.UserCertsRequest) (*proto.Certs, error) {
 	certs, err := c.grpc.GenerateUserCerts(ctx, &req)
 	if err != nil {
 		return nil, trail.FromGRPC(err)
@@ -464,7 +467,7 @@ func (c *Client) GenerateUserCerts(ctx context.Context, req auth.UserCertsReques
 }
 
 // createOrResumeAuditStream creates or resumes audit stream described in the request.
-func (c *Client) createOrResumeAuditStream(ctx context.Context, request auth.AuditStreamRequest) (events.Stream, error) {
+func (c *Client) createOrResumeAuditStream(ctx context.Context, request proto.AuditStreamRequest) (events.Stream, error) {
 	closeCtx, cancel := context.WithCancel(ctx)
 	stream, err := c.grpc.CreateAuditStream(closeCtx, grpc.UseCompressor(ggzip.Name))
 	if err != nil {
@@ -487,9 +490,9 @@ func (c *Client) createOrResumeAuditStream(ctx context.Context, request auth.Aud
 
 // ResumeAuditStream resumes existing audit stream.
 func (c *Client) ResumeAuditStream(ctx context.Context, sid session.ID, uploadID string) (events.Stream, error) {
-	return c.createOrResumeAuditStream(ctx, auth.AuditStreamRequest{
-		Request: &auth.AuditStreamRequest_ResumeStream{
-			ResumeStream: &auth.ResumeStream{
+	return c.createOrResumeAuditStream(ctx, proto.AuditStreamRequest{
+		Request: &proto.AuditStreamRequest_ResumeStream{
+			ResumeStream: &proto.ResumeStream{
 				SessionID: string(sid),
 				UploadID:  uploadID,
 			}},
@@ -498,16 +501,16 @@ func (c *Client) ResumeAuditStream(ctx context.Context, sid session.ID, uploadID
 
 // CreateAuditStream creates new audit stream.
 func (c *Client) CreateAuditStream(ctx context.Context, sid session.ID) (events.Stream, error) {
-	return c.createOrResumeAuditStream(ctx, auth.AuditStreamRequest{
-		Request: &auth.AuditStreamRequest_CreateStream{
-			CreateStream: &auth.CreateStream{SessionID: string(sid)}},
+	return c.createOrResumeAuditStream(ctx, proto.AuditStreamRequest{
+		Request: &proto.AuditStreamRequest_CreateStream{
+			CreateStream: &proto.CreateStream{SessionID: string(sid)}},
 	})
 }
 
 type auditStreamer struct {
 	statusCh chan events.StreamStatus
 	mu       sync.RWMutex
-	stream   auth.AuthService_CreateAuditStreamClient
+	stream   proto.AuthService_CreateAuditStreamClient
 	err      error
 	closeCtx context.Context
 	cancel   context.CancelFunc
@@ -517,18 +520,18 @@ type auditStreamer struct {
 // the stream completed and closes the stream instance.
 func (s *auditStreamer) Close(ctx context.Context) error {
 	defer s.closeWithError(nil)
-	return trail.FromGRPC(s.stream.Send(&auth.AuditStreamRequest{
-		Request: &auth.AuditStreamRequest_FlushAndCloseStream{
-			FlushAndCloseStream: &auth.FlushAndCloseStream{},
+	return trail.FromGRPC(s.stream.Send(&proto.AuditStreamRequest{
+		Request: &proto.AuditStreamRequest_FlushAndCloseStream{
+			FlushAndCloseStream: &proto.FlushAndCloseStream{},
 		},
 	}))
 }
 
 // Complete completes stream.
 func (s *auditStreamer) Complete(ctx context.Context) error {
-	return trail.FromGRPC(s.stream.Send(&auth.AuditStreamRequest{
-		Request: &auth.AuditStreamRequest_CompleteStream{
-			CompleteStream: &auth.CompleteStream{},
+	return trail.FromGRPC(s.stream.Send(&proto.AuditStreamRequest{
+		Request: &proto.AuditStreamRequest_CompleteStream{
+			CompleteStream: &proto.CompleteStream{},
 		},
 	}))
 }
@@ -545,8 +548,8 @@ func (s *auditStreamer) EmitAuditEvent(ctx context.Context, event events.AuditEv
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	err = trail.FromGRPC(s.stream.Send(&auth.AuditStreamRequest{
-		Request: &auth.AuditStreamRequest_Event{Event: oneof},
+	err = trail.FromGRPC(s.stream.Send(&proto.AuditStreamRequest{
+		Request: &proto.AuditStreamRequest_Event{Event: oneof},
 	}))
 	if err != nil {
 		s.closeWithError(err)
@@ -635,7 +638,7 @@ func (c *Client) CreateAccessRequest(ctx context.Context, req services.AccessReq
 // extract the OTP key from the QR code, then allow the user to signup with
 // the same OTP token.
 func (c *Client) RotateResetPasswordTokenSecrets(ctx context.Context, tokenID string) (services.ResetPasswordTokenSecrets, error) {
-	secrets, err := c.grpc.RotateResetPasswordTokenSecrets(ctx, &auth.RotateResetPasswordTokenSecretsRequest{
+	secrets, err := c.grpc.RotateResetPasswordTokenSecrets(ctx, &proto.RotateResetPasswordTokenSecretsRequest{
 		TokenID: tokenID,
 	})
 	if err != nil {
@@ -646,7 +649,7 @@ func (c *Client) RotateResetPasswordTokenSecrets(ctx context.Context, tokenID st
 
 // GetResetPasswordToken returns a ResetPasswordtoken by tokenID.
 func (c *Client) GetResetPasswordToken(ctx context.Context, tokenID string) (services.ResetPasswordToken, error) {
-	token, err := c.grpc.GetResetPasswordToken(ctx, &auth.GetResetPasswordTokenRequest{
+	token, err := c.grpc.GetResetPasswordToken(ctx, &proto.GetResetPasswordTokenRequest{
 		TokenID: tokenID,
 	})
 	if err != nil {
@@ -657,8 +660,8 @@ func (c *Client) GetResetPasswordToken(ctx context.Context, tokenID string) (ser
 }
 
 // CreateResetPasswordToken creates reset password token.
-func (c *Client) CreateResetPasswordToken(ctx context.Context, req auth.CreateResetPasswordTokenRequest) (services.ResetPasswordToken, error) {
-	token, err := c.grpc.CreateResetPasswordToken(ctx, &req)
+func (c *Client) CreateResetPasswordToken(ctx context.Context, req *proto.CreateResetPasswordTokenRequest) (services.ResetPasswordToken, error) {
+	token, err := c.grpc.CreateResetPasswordToken(ctx, req)
 	if err != nil {
 		return nil, trail.FromGRPC(err)
 	}
@@ -668,7 +671,7 @@ func (c *Client) CreateResetPasswordToken(ctx context.Context, req auth.CreateRe
 
 // DeleteAccessRequest deletes an access request.
 func (c *Client) DeleteAccessRequest(ctx context.Context, reqID string) error {
-	_, err := c.grpc.DeleteAccessRequest(ctx, &auth.RequestID{ID: reqID})
+	_, err := c.grpc.DeleteAccessRequest(ctx, &proto.RequestID{ID: reqID})
 	return trail.FromGRPC(err)
 }
 
@@ -699,7 +702,7 @@ func WithDelegator(ctx context.Context, delegator string) context.Context {
 
 // SetAccessRequestState updates the state of an existing access request.
 func (c *Client) SetAccessRequestState(ctx context.Context, params services.AccessRequestUpdate) error {
-	setter := auth.RequestStateSetter{
+	setter := proto.RequestStateSetter{
 		ID:          params.RequestID,
 		State:       params.State,
 		Reason:      params.Reason,
@@ -779,7 +782,7 @@ func (c *Client) UpsertKubeService(ctx context.Context, s services.Server) error
 	if !ok {
 		return trace.BadParameter("invalid type %T, expected *services.ServerV2", server)
 	}
-	_, err := c.grpc.UpsertKubeService(ctx, &auth.UpsertKubeServiceRequest{
+	_, err := c.grpc.UpsertKubeService(ctx, &proto.UpsertKubeServiceRequest{
 		Server: server,
 	})
 	return trace.Wrap(err)
@@ -788,7 +791,7 @@ func (c *Client) UpsertKubeService(ctx context.Context, s services.Server) error
 // GetKubeServices returns the list of kubernetes services registered in the
 // cluster.
 func (c *Client) GetKubeServices(ctx context.Context) ([]services.Server, error) {
-	resp, err := c.grpc.GetKubeServices(ctx, &auth.GetKubeServicesRequest{})
+	resp, err := c.grpc.GetKubeServices(ctx, &proto.GetKubeServicesRequest{})
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
@@ -807,7 +810,7 @@ func (c *Client) GetAppServers(ctx context.Context, namespace string, opts ...se
 		return nil, trace.Wrap(err)
 	}
 
-	resp, err := c.grpc.GetAppServers(ctx, &auth.GetAppServersRequest{
+	resp, err := c.grpc.GetAppServers(ctx, &proto.GetAppServersRequest{
 		Namespace:      namespace,
 		SkipValidation: cfg.SkipValidation,
 	})
@@ -830,7 +833,7 @@ func (c *Client) UpsertAppServer(ctx context.Context, server services.Server) (*
 		return nil, trace.BadParameter("invalid type %T", server)
 	}
 
-	keepAlive, err := c.grpc.UpsertAppServer(ctx, &auth.UpsertAppServerRequest{
+	keepAlive, err := c.grpc.UpsertAppServer(ctx, &proto.UpsertAppServerRequest{
 		Server: s,
 	})
 	if err != nil {
@@ -841,7 +844,7 @@ func (c *Client) UpsertAppServer(ctx context.Context, server services.Server) (*
 
 // DeleteAppServer removes an application server.
 func (c *Client) DeleteAppServer(ctx context.Context, namespace string, name string) error {
-	_, err := c.grpc.DeleteAppServer(ctx, &auth.DeleteAppServerRequest{
+	_, err := c.grpc.DeleteAppServer(ctx, &proto.DeleteAppServerRequest{
 		Namespace: namespace,
 		Name:      name,
 	})
@@ -850,7 +853,7 @@ func (c *Client) DeleteAppServer(ctx context.Context, namespace string, name str
 
 // DeleteAllAppServers removes all application servers.
 func (c *Client) DeleteAllAppServers(ctx context.Context, namespace string) error {
-	_, err := c.grpc.DeleteAllAppServers(ctx, &auth.DeleteAllAppServersRequest{
+	_, err := c.grpc.DeleteAllAppServers(ctx, &proto.DeleteAllAppServersRequest{
 		Namespace: namespace,
 	})
 	return trail.FromGRPC(err)
@@ -858,7 +861,7 @@ func (c *Client) DeleteAllAppServers(ctx context.Context, namespace string) erro
 
 // GetAppSession gets an application web session.
 func (c *Client) GetAppSession(ctx context.Context, req services.GetAppSessionRequest) (services.WebSession, error) {
-	resp, err := c.grpc.GetAppSession(ctx, &auth.GetAppSessionRequest{
+	resp, err := c.grpc.GetAppSession(ctx, &proto.GetAppSessionRequest{
 		SessionID: req.SessionID,
 	})
 	if err != nil {
@@ -885,7 +888,7 @@ func (c *Client) GetAppSessions(ctx context.Context) ([]services.WebSession, err
 // CreateAppSession creates an application web session. Application web
 // sessions represent a browser session the client holds.
 func (c *Client) CreateAppSession(ctx context.Context, req services.CreateAppSessionRequest) (services.WebSession, error) {
-	resp, err := c.grpc.CreateAppSession(ctx, &auth.CreateAppSessionRequest{
+	resp, err := c.grpc.CreateAppSession(ctx, &proto.CreateAppSessionRequest{
 		Username:      req.Username,
 		ParentSession: req.ParentSession,
 		PublicAddr:    req.PublicAddr,
@@ -901,7 +904,7 @@ func (c *Client) CreateAppSession(ctx context.Context, req services.CreateAppSes
 // DeleteAppSession removes an application web session.
 func (c *Client) DeleteAppSession(ctx context.Context, req services.DeleteAppSessionRequest) error {
 
-	_, err := c.grpc.DeleteAppSession(ctx, &auth.DeleteAppSessionRequest{
+	_, err := c.grpc.DeleteAppSession(ctx, &proto.DeleteAppSessionRequest{
 		SessionID: req.SessionID,
 	})
 	return trail.FromGRPC(err)
@@ -915,7 +918,7 @@ func (c *Client) DeleteAllAppSessions(ctx context.Context) error {
 
 // GenerateAppToken creates a JWT token with application access.
 func (c *Client) GenerateAppToken(ctx context.Context, req jwt.GenerateAppTokenRequest) (string, error) {
-	resp, err := c.grpc.GenerateAppToken(ctx, &auth.GenerateAppTokenRequest{
+	resp, err := c.grpc.GenerateAppToken(ctx, &proto.GenerateAppTokenRequest{
 		Username: req.Username,
 		Roles:    req.Roles,
 		URI:      req.URI,
@@ -930,7 +933,7 @@ func (c *Client) GenerateAppToken(ctx context.Context, req jwt.GenerateAppTokenR
 
 // DeleteKubeService deletes a named kubernetes service.
 func (c *Client) DeleteKubeService(ctx context.Context, name string) error {
-	_, err := c.grpc.DeleteKubeService(ctx, &auth.DeleteKubeServiceRequest{
+	_, err := c.grpc.DeleteKubeService(ctx, &proto.DeleteKubeServiceRequest{
 		Name: name,
 	})
 	return trace.Wrap(err)
@@ -938,6 +941,6 @@ func (c *Client) DeleteKubeService(ctx context.Context, name string) error {
 
 // DeleteAllKubeServices deletes all registered kubernetes services.
 func (c *Client) DeleteAllKubeServices(ctx context.Context) error {
-	_, err := c.grpc.DeleteAllKubeServices(ctx, &auth.DeleteAllKubeServicesRequest{})
+	_, err := c.grpc.DeleteAllKubeServices(ctx, &proto.DeleteAllKubeServicesRequest{})
 	return trace.Wrap(err)
 }

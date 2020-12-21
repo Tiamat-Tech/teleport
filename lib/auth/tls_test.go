@@ -35,7 +35,7 @@ import (
 	"golang.org/x/crypto/ssh"
 
 	"github.com/gravitational/teleport"
-	proto "github.com/gravitational/teleport/api/auth"
+	"github.com/gravitational/teleport/api/proto"
 	"github.com/gravitational/teleport/lib/backend"
 	"github.com/gravitational/teleport/lib/defaults"
 	"github.com/gravitational/teleport/lib/events"

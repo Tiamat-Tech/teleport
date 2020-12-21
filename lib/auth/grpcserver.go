@@ -25,7 +25,7 @@ import (
 
 	"github.com/gravitational/teleport"
 	"github.com/gravitational/teleport/api"
-	proto "github.com/gravitational/teleport/api/auth"
+	"github.com/gravitational/teleport/api/proto"
 	"github.com/gravitational/teleport/lib/events"
 	"github.com/gravitational/teleport/lib/httplib"
 	"github.com/gravitational/teleport/lib/jwt"

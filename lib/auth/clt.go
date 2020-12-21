@@ -33,7 +33,7 @@ import (
 
 	"github.com/gravitational/teleport"
 	"github.com/gravitational/teleport/api"
-	proto "github.com/gravitational/teleport/api/auth"
+	"github.com/gravitational/teleport/api/proto"
 	"github.com/gravitational/teleport/lib/backend"
 	"github.com/gravitational/teleport/lib/defaults"
 	"github.com/gravitational/teleport/lib/events"
@@ -65,8 +65,8 @@ type ContextDialerFunc = api.ContextDialerFunc
 // APIClient is aliased here so that it can be embedded in Client
 type APIClient = api.Client
 
-// Client is HTTP Auth API client. It works by connecting to auth servers
-// via HTTP.
+// Client is the Auth API client. It works by connecting to auth servers
+// via gRPC and HTTP..
 //
 // When Teleport servers connect to auth API, they usually establish an SSH
 // tunnel first, and then do HTTP-over-SSH. This client is wrapped by auth.TunClient
@@ -74,8 +74,12 @@ type APIClient = api.Client
 type Client struct {
 	sync.Mutex
 	ClientConfig
+	// roundtrip.Client and transport are deprecated and
+	// will be gradually phased out in favor of grpc.
 	roundtrip.Client
 	transport *http.Transport
+	// APIClient is embedded so that Client can inherit its grpc endpoint
+	// methods to satisfy the ClientI interface.
 	APIClient
 }
 
@@ -162,7 +166,7 @@ func (c *ClientConfig) CheckAndSetDefaults() error {
 	if c.Dialer == nil {
 		addrs := make([]string, len(c.Addrs))
 		for i, a := range c.Addrs {
-			addrs[i] = a.Addr
+			addrs[i] = a.String()
 		}
 		var err error
 		if c.Dialer, err = api.NewAddrDialer(addrs, c.KeepAlivePeriod, api.DefaultDialTimeout); err != nil {
@@ -2098,7 +2102,7 @@ func (c *Client) DeleteTrustedCluster(ctx context.Context, name string) error {
 
 // CreateResetPasswordToken creates reset password token
 func (c *Client) CreateResetPasswordToken(ctx context.Context, req CreateResetPasswordTokenRequest) (services.ResetPasswordToken, error) {
-	return c.APIClient.CreateResetPasswordToken(ctx, proto.CreateResetPasswordTokenRequest{
+	return c.APIClient.CreateResetPasswordToken(ctx, &proto.CreateResetPasswordTokenRequest{
 		Name: req.Name,
 		TTL:  proto.Duration(req.TTL),
 		Type: req.Type,

@@ -1,5 +1,5 @@
 syntax = "proto3";
-package auth;
+package proto;
 
 import "gogoproto/gogo.proto";
 import "google/protobuf/empty.proto";

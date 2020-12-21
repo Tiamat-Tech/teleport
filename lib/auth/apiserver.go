@@ -30,7 +30,7 @@ import (
 	"time"
 
 	"github.com/gravitational/teleport"
-	proto "github.com/gravitational/teleport/api/auth"
+	"github.com/gravitational/teleport/api/proto"
 	"github.com/gravitational/teleport/lib/defaults"
 	"github.com/gravitational/teleport/lib/events"
 	"github.com/gravitational/teleport/lib/httplib"

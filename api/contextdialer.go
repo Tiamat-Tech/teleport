@@ -18,9 +18,10 @@ package api
 
 import (
 	"context"
-	"fmt"
 	"net"
 	"time"
+
+	"github.com/gravitational/trace"
 )
 
 // ContextDialer represents network dialer interface that uses context
@@ -40,7 +41,7 @@ func (f ContextDialerFunc) DialContext(ctx context.Context, network, addr string
 // NewAddrDialer makes a new dialer from a list of addresses
 func NewAddrDialer(addrs []string, keepAliveInterval, dialTimeout time.Duration) (ContextDialer, error) {
 	if len(addrs) == 0 {
-		return nil, fmt.Errorf("no addreses to dial")
+		return nil, trace.BadParameter("no addreses to dial")
 	}
 	dialer := net.Dialer{
 		Timeout:   dialTimeout,
@@ -53,7 +54,6 @@ func NewAddrDialer(addrs []string, keepAliveInterval, dialTimeout time.Duration)
 				return conn, nil
 			}
 		}
-		// not wrapping on purpose to preserve the original error
-		return nil, err
+		return nil, trace.Wrap(err)
 	}), nil
 }
