@@ -23,6 +23,7 @@ import (
 	"github.com/gravitational/trace"
 )
 
+// EventToGRPC converts a services.Event to an auth.Event
 func EventToGRPC(in services.Event) (*auth.Event, error) {
 	eventType, err := eventTypeToGRPC(in.Type)
 	if err != nil {
@@ -117,6 +118,7 @@ func eventTypeToGRPC(in backend.OpType) (auth.Operation, error) {
 	}
 }
 
+// EventFromGRPC converts an auth.Event to a services.Event
 func EventFromGRPC(in auth.Event) (*services.Event, error) {
 	eventType, err := eventTypeFromGRPC(in.Type)
 	if err != nil {

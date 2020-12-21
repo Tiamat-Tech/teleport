@@ -11,8 +11,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package api holds commonly used types, constants, defaults, and support functions
-// that are related to the api client implementation.
+// Package auth holds the protobuff api specification
+// for Teleport Auth servers and clients
 package auth
 
 import (

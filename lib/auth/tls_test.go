@@ -33,9 +33,7 @@ import (
 	"time"
 
 	"golang.org/x/crypto/ssh"
-	"google.golang.org/grpc"
 
-	empty "github.com/golang/protobuf/ptypes/empty"
 	"github.com/gravitational/teleport"
 	proto "github.com/gravitational/teleport/api/auth"
 	"github.com/gravitational/teleport/lib/backend"
@@ -48,34 +46,12 @@ import (
 	"github.com/gravitational/teleport/lib/session"
 	"github.com/gravitational/teleport/lib/tlsca"
 	"github.com/gravitational/teleport/lib/utils"
-	"github.com/gravitational/trace/trail"
 
 	"github.com/gravitational/trace"
 	"github.com/jonboulle/clockwork"
 	"github.com/pquerna/otp/totp"
 	"gopkg.in/check.v1"
 )
-
-// MockAuthServiceClient stubs grpc AuthServiceClient interface.
-type mockAuthServiceClient struct {
-	proto.AuthServiceClient
-	err error
-}
-
-// newMockAuthServiceClient returns a new instace of mockAuthServiceClient
-func newMockAuthServiceClient() *mockAuthServiceClient {
-	return &mockAuthServiceClient{}
-}
-
-// DeleteUser returns a dynamically defined method.
-func (m *mockAuthServiceClient) DeleteUser(ctx context.Context, in *proto.DeleteUserRequest, opts ...grpc.CallOption) (*empty.Empty, error) {
-	return nil, trail.ToGRPC(m.err)
-}
-
-// reset resets states to its zero values.
-func (m *mockAuthServiceClient) reset() {
-	m.err = nil
-}
 
 type TLSSuite struct {
 	dataDir string

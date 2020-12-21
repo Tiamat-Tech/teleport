@@ -29,8 +29,7 @@ type ContextDialer interface {
 	DialContext(ctx context.Context, network, addr string) (net.Conn, error)
 }
 
-// ContextDialerFunc is a function wrapper that implements the
-// ContextDialer interface
+// ContextDialerFunc is a function wrapper that implements the ContextDialer interface
 type ContextDialerFunc func(ctx context.Context, network, addr string) (net.Conn, error)
 
 // DialContext is a function that dials to the specified address
@@ -38,8 +37,8 @@ func (f ContextDialerFunc) DialContext(ctx context.Context, network, addr string
 	return f(ctx, network, addr)
 }
 
-// NewAddrDialer returns new dialer from a list of addresses
-func NewAddrDialer(addrs []string, keepAliveInterval time.Duration, dialTimeout time.Duration) (ContextDialer, error) {
+// NewAddrDialer makes a new dialer from a list of addresses
+func NewAddrDialer(addrs []string, keepAliveInterval, dialTimeout time.Duration) (ContextDialer, error) {
 	if len(addrs) == 0 {
 		return nil, fmt.Errorf("no addreses to dial")
 	}

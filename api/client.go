@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package auth implements teleport's grpc auth client
+// Package api holds the implementation of the gRPC auth client
 package api
 
 import (
@@ -62,17 +62,16 @@ type Client struct {
 type Config struct {
 	// Addrs is a list of teleport auth/proxy server addresses to dial
 	Addrs []string
-	// Dialer is a custom dialer, if provided
-	// is used instead of the list of addresses
+	// Dialer is a custom dialer that is used instead of Addrs when provided
 	Dialer ContextDialer
 	// DialTimeout defines how long to attempt dialing before timing out
 	DialTimeout time.Duration
 	// KeepAlivePeriod defines period between keep alives
 	KeepAlivePeriod time.Duration
-	// KeepAliveCount specifies amount of missed keep alives
-	// to wait for until declaring connection as broken
+	// KeepAliveCount specifies the amount of missed keep alives
+	// to wait for before declaring the connection as broken
 	KeepAliveCount int
-	// TLS is a TLS config
+	// TLS is the client's TLS config
 	TLS *tls.Config
 }
 
@@ -109,14 +108,14 @@ func (c *Config) CheckAndSetDefaults() error {
 	return nil
 }
 
-// TLSConfig returns TLS config used by the client, could return nil
-// if the client is not using TLS
+// TLSConfig returns the TLS config used by the client.
+// It could return nil if the client is not using TLS
 func (c *Client) TLSConfig() *tls.Config {
 	return c.c.TLS
 }
 
 // NewClient returns a new auth client that uses mutual TLS authentication and
-// connects to the remote server using the Dialer or Addrs in Config.
+// connects to the remote server using the Dialer or Addrs given in Config.
 func NewClient(cfg Config) (*Client, error) {
 	if err := cfg.CheckAndSetDefaults(); err != nil {
 		return nil, trace.Wrap(err)
@@ -136,7 +135,9 @@ func NewClient(cfg Config) (*Client, error) {
 
 	tlsConfig := c.c.TLS.Clone()
 	tlsConfig.NextProtos = []string{http2.NextProtoTLS}
-	conn, err := grpc.Dial(teleport.APIDomain,
+
+	var err error
+	if c.conn, err = grpc.Dial(teleport.APIDomain,
 		dialer,
 		grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig)),
 		grpc.WithKeepaliveParams(keepalive.ClientParameters{
@@ -144,12 +145,10 @@ func NewClient(cfg Config) (*Client, error) {
 			Timeout:             c.c.KeepAlivePeriod * time.Duration(c.c.KeepAliveCount),
 			PermitWithoutStream: true,
 		}),
-	)
-	if err != nil {
+	); err != nil {
 		return nil, trail.FromGRPC(err)
 	}
 
-	c.conn = conn
 	c.grpc = auth.NewAuthServiceClient(c.conn)
 	return c, nil
 }
@@ -171,6 +170,7 @@ func (c *Client) isClosed() bool {
 	return atomic.LoadInt32(&c.closedFlag) == 1
 }
 
+// set Client closedFlag to 1 and return whether it was changed.
 func (c *Client) setClosed() bool {
 	return atomic.CompareAndSwapInt32(&c.closedFlag, 0, 1)
 }
@@ -185,7 +185,7 @@ func (c *Client) Ping(ctx context.Context) (auth.PingResponse, error) {
 }
 
 // UpsertNode is used by SSH servers to report their presence
-// to the auth servers in form of hearbeat expiring after ttl period.
+// to the auth servers in form of heartbeat expiring after ttl period.
 func (c *Client) UpsertNode(s services.Server) (*services.KeepAlive, error) {
 	if s.GetNamespace() == "" {
 		return nil, trace.BadParameter("missing node namespace")
@@ -201,8 +201,8 @@ func (c *Client) UpsertNode(s services.Server) (*services.KeepAlive, error) {
 	return keepAlive, nil
 }
 
-// NewKeepAliver returns a new instance of keep aliver
-// run k.Close to release the keepAliver and its goroutines
+// NewKeepAliver returns a new instance of keep aliver.
+// Run k.Close to release the keepAliver and its goroutines
 func (c *Client) NewKeepAliver(ctx context.Context) (services.KeepAliver, error) {
 	cancelCtx, cancel := context.WithCancel(ctx)
 	stream, err := c.grpc.SendKeepAlives(cancelCtx)
@@ -230,7 +230,7 @@ type streamKeepAliver struct {
 	err         error
 }
 
-// KeepAlives returns the streamKeepAliver's channel of keepAlives
+// KeepAlives returns the streamKeepAliver's channel of KeepAlives
 func (k *streamKeepAliver) KeepAlives() chan<- services.KeepAlive {
 	return k.keepAlivesC
 }
@@ -282,7 +282,7 @@ func (k *streamKeepAliver) Close() error {
 	return nil
 }
 
-// NewWatcher returns a new event watcher
+// NewWatcher returns a new streamWatcher
 func (c *Client) NewWatcher(ctx context.Context, watch services.Watch) (services.Watcher, error) {
 	cancelCtx, cancel := context.WithCancel(ctx)
 	var protoWatch auth.Watch
@@ -360,7 +360,7 @@ func (w *streamWatcher) receiveEvents() {
 	}
 }
 
-// Done returns a channel that closes once the streamKeepAliver is Closed
+// Done returns a channel that closes once the streamWatcher is Closed
 func (w *streamWatcher) Done() <-chan struct{} {
 	return w.ctx.Done()
 }
@@ -645,7 +645,7 @@ func (c *Client) RotateResetPasswordTokenSecrets(ctx context.Context, tokenID st
 	return secrets, nil
 }
 
-// GetResetPasswordTokens returns all ResetPasswordTokens.
+// GetResetPasswordToken returns a ResetPasswordtoken by tokenID.
 func (c *Client) GetResetPasswordToken(ctx context.Context, tokenID string) (services.ResetPasswordToken, error) {
 	token, err := c.grpc.GetResetPasswordToken(ctx, &auth.GetResetPasswordTokenRequest{
 		TokenID: tokenID,

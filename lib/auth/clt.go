@@ -56,10 +56,14 @@ const (
 	MissingNamespaceError = "missing required parameter: namespace"
 )
 
-// These types are aliases for backwards compatibility
-type APIClient = api.Client
+// ContextDialer type alias for backwards compatibility
 type ContextDialer = api.ContextDialer
+
+// ContextDialerFunc type alias for backwards compatibility
 type ContextDialerFunc = api.ContextDialerFunc
+
+// APIClient is aliased here so that it can be embedded in Client
+type APIClient = api.Client
 
 // Client is HTTP Auth API client. It works by connecting to auth servers
 // via HTTP.
@@ -72,11 +76,17 @@ type Client struct {
 	ClientConfig
 	roundtrip.Client
 	transport *http.Transport
-	*APIClient
+	APIClient
 }
 
 // Make sure Client implements all the necessary methods.
 var _ ClientI = &Client{}
+
+// TLSConfig returns TLS config used by the client, could return nil
+// if the client is not using TLS
+func (c *Client) TLSConfig() *tls.Config {
+	return c.ClientConfig.TLS
+}
 
 // EncodeClusterName encodes cluster name in the SNI hostname
 func EncodeClusterName(clusterName string) string {
@@ -235,7 +245,7 @@ func NewTLSClient(cfg ClientConfig, params ...roundtrip.ClientParam) (*Client, e
 	}
 	return &Client{
 		ClientConfig: cfg,
-		APIClient:    apiClient,
+		APIClient:    *apiClient,
 		Client:       *roundtripClient,
 		transport:    transport,
 	}, nil
@@ -2080,6 +2090,12 @@ func (c *Client) ValidateTrustedCluster(validateRequest *ValidateTrustedClusterR
 	return validateResponse, nil
 }
 
+// DeleteTrustedCluster deletes a trusted cluster by name.
+func (c *Client) DeleteTrustedCluster(ctx context.Context, name string) error {
+	_, err := c.Delete(c.Endpoint("trustedclusters", name))
+	return trace.Wrap(err)
+}
+
 // CreateResetPasswordToken creates reset password token
 func (c *Client) CreateResetPasswordToken(ctx context.Context, req CreateResetPasswordTokenRequest) (services.ResetPasswordToken, error) {
 	return c.APIClient.CreateResetPasswordToken(ctx, proto.CreateResetPasswordTokenRequest{
@@ -2087,12 +2103,6 @@ func (c *Client) CreateResetPasswordToken(ctx context.Context, req CreateResetPa
 		TTL:  proto.Duration(req.TTL),
 		Type: req.Type,
 	})
-}
-
-// DeleteTrustedCluster deletes a trusted cluster by name.
-func (c *Client) DeleteTrustedCluster(ctx context.Context, name string) error {
-	_, err := c.Delete(c.Endpoint("trustedclusters", name))
-	return trace.Wrap(err)
 }
 
 // UpsertAppSession not implemented: can only be called locally.
