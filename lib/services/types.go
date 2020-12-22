@@ -16,6 +16,8 @@ type AccessRequestFilter = types.AccessRequestFilter
 type AccessRequestConditions struct{ types.AccessRequestConditions }
 type RequestState = types.RequestState
 
+type App = types.App
+
 type Duration = types.Duration
 
 type Event = types.Event
@@ -44,6 +46,7 @@ type RoleConditions struct{ types.RoleConditions }
 type RoleConditionType = types.RoleConditionType
 type RoleOptions struct{ types.RoleOptions }
 type Rule struct{ types.Rule }
+type Labels = types.Labels
 
 type WebSessionV2 struct{ types.WebSessionV2 }
 type WebSessionSpecV2 = types.WebSessionSpecV2
@@ -54,6 +57,7 @@ var (
 	NewDuration           = types.NewDuration
 	IsValidLabelKey       = types.IsValidLabelKey
 	MetadataSchema        = types.MetadataSchema
+	CopyRulesSlice        = types.CopyRulesSlice
 	RequestState_NONE     = types.RequestState_NONE
 	RequestState_PENDING  = types.RequestState_PENDING
 	RequestState_APPROVED = types.RequestState_APPROVED
