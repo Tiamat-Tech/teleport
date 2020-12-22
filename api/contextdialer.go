@@ -54,6 +54,7 @@ func NewAddrDialer(addrs []string, keepAliveInterval, dialTimeout time.Duration)
 				return conn, nil
 			}
 		}
-		return nil, trace.Wrap(err)
+		// not wrapping on purpose to preserve the original error
+		return nil, err
 	}), nil
 }
