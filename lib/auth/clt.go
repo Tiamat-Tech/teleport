@@ -91,6 +91,18 @@ func NewClient(cfg api.Config, params ...roundtrip.ClientParam) (*Client, error)
 	if err := cfg.CheckAndSetDefaults(); err != nil {
 		return nil, trace.Wrap(err)
 	}
+
+	// this logic is necessary to force client to always send certificate
+	// regardless of the server setting, otherwise client may pick
+	// not to send the client certificate by looking at certificate request
+	if len(cfg.TLS.Certificates) != 0 {
+		cert := cfg.TLS.Certificates[0]
+		cfg.TLS.Certificates = nil
+		cfg.TLS.GetClientCertificate = func(_ *tls.CertificateRequestInfo) (*tls.Certificate, error) {
+			return &cert, nil
+		}
+	}
+
 	transport := &http.Transport{
 		// notice that below roundtrip.Client is passed
 		// teleport.APIEndpoint as an address for the API server, this is
@@ -220,6 +232,7 @@ func NewTLSClient(cfg ClientConfig, params ...roundtrip.ClientParam) (*Client, e
 		KeepAliveCount:  cfg.KeepAliveCount,
 		TLS:             cfg.TLS,
 	}
+
 	return NewClient(c, params...)
 }
 
