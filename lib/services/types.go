@@ -17,6 +17,8 @@ type RequestState = types.RequestState
 
 type Duration = types.Duration
 
+type Event = types.Event
+
 type PluginData = types.PluginData
 type PluginDataV3 = types.PluginDataV3
 type PluginDataSpecV3 = types.PluginDataSpecV3

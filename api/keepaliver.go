@@ -5,7 +5,7 @@ import (
 	"sync"
 
 	"github.com/gravitational/teleport/api/proto"
-	"github.com/gravitational/teleport/lib/services"
+	"github.com/gravitational/teleport/api/types"
 
 	"github.com/golang/protobuf/ptypes/empty"
 	"github.com/gravitational/trace/trail"

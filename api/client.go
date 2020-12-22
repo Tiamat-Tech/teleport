@@ -28,10 +28,10 @@ import (
 
 	"github.com/gravitational/teleport"
 	"github.com/gravitational/teleport/api/proto"
+	"github.com/gravitational/teleport/api/types"
 	"github.com/gravitational/teleport/lib/defaults"
 	"github.com/gravitational/teleport/lib/events"
 	"github.com/gravitational/teleport/lib/jwt"
-	"github.com/gravitational/teleport/lib/services"
 
 	"github.com/golang/protobuf/ptypes/empty"
 	"github.com/gravitational/trace"
@@ -207,16 +207,6 @@ func (c *Client) UpsertNode(s types.Server) (*types.KeepAlive, error) {
 		return nil, trail.FromGRPC(err)
 	}
 	return keepAlive, nil
-}
-
-// NewKeepAliver returns a new instance of keep aliver
-// run k.Close to release the keepAliver and its goroutines
-func (c *Client) NewKeepAliver(ctx context.Context) (types.KeepAliver, error) {
-	cancelCtx, cancel := context.WithCancel(ctx)
-	stream, err := c.grpc.SendKeepAlives(cancelCtx)
-	if err != nil {
-		cancel()
-		return nil, trail.FromGRPC(err)
 }
 
 // CreateUser creates a new user from the specified descriptor.
