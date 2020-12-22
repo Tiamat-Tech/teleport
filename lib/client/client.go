@@ -31,6 +31,7 @@ import (
 	"golang.org/x/crypto/ssh/agent"
 
 	"github.com/gravitational/teleport"
+	"github.com/gravitational/teleport/api"
 	"github.com/gravitational/teleport/api/proto"
 	"github.com/gravitational/teleport/lib/auth"
 	"github.com/gravitational/teleport/lib/defaults"
@@ -383,7 +384,7 @@ func (proxy *ProxyClient) ConnectToCluster(ctx context.Context, clusterName stri
 	})
 
 	if proxy.teleportClient.SkipLocalAuth {
-		return auth.NewTLSClient(auth.ClientConfig{
+		return auth.NewClient(api.Config{
 			Dialer: dialer,
 			TLS:    proxy.teleportClient.TLS,
 		})
@@ -398,7 +399,7 @@ func (proxy *ProxyClient) ConnectToCluster(ctx context.Context, clusterName stri
 	if err != nil {
 		return nil, trace.Wrap(err, "failed to generate client TLS config")
 	}
-	clt, err := auth.NewTLSClient(auth.ClientConfig{
+	clt, err := auth.NewClient(api.Config{
 		Dialer: dialer,
 		TLS:    tlsConfig,
 	})

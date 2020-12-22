@@ -73,10 +73,9 @@ type APIClient = api.Client
 // in lib/auth/tun.go
 type Client struct {
 	sync.Mutex
-	ClientConfig
-	// roundtrip.Client and transport are deprecated and
-	// will be gradually phased out in favor of grpc.
+	// Deprecated, will be gradually phased out in favor of grpc.
 	roundtrip.Client
+	// Deprecated, will be gradually phased out in favor of grpc.
 	transport *http.Transport
 	// APIClient is embedded so that Client can inherit its grpc endpoint
 	// methods to satisfy the ClientI interface.
@@ -86,113 +85,9 @@ type Client struct {
 // Make sure Client implements all the necessary methods.
 var _ ClientI = &Client{}
 
-// TLSConfig returns TLS config used by the client, could return nil
-// if the client is not using TLS
-func (c *Client) TLSConfig() *tls.Config {
-	return c.ClientConfig.TLS
-}
-
-// EncodeClusterName encodes cluster name in the SNI hostname
-func EncodeClusterName(clusterName string) string {
-	// hex is used to hide "." that will prevent wildcard *. entry to match
-	return fmt.Sprintf("%v.%v", hex.EncodeToString([]byte(clusterName)), teleport.APIDomain)
-}
-
-// DecodeClusterName decodes cluster name, returns NotFound
-// if no cluster name is encoded (empty subdomain),
-// so servers can detect cases when no server name passed
-// returns BadParameter if encoding does not match
-func DecodeClusterName(serverName string) (string, error) {
-	if serverName == teleport.APIDomain {
-		return "", trace.NotFound("no cluster name is encoded")
-	}
-	const suffix = "." + teleport.APIDomain
-	if !strings.HasSuffix(serverName, suffix) {
-		return "", trace.NotFound("no cluster name is encoded")
-	}
-	clusterName := strings.TrimSuffix(serverName, suffix)
-
-	decoded, err := hex.DecodeString(clusterName)
-	if err != nil {
-		return "", trace.BadParameter("failed to decode cluster name: %v", err)
-	}
-	return string(decoded), nil
-}
-
-// ClientTimeout sets idle and dial timeouts of the HTTP transport
-// used by the client.
-func ClientTimeout(timeout time.Duration) roundtrip.ClientParam {
-	return func(c *roundtrip.Client) error {
-		transport, ok := (c.HTTPClient().Transport).(*http.Transport)
-		if !ok {
-			return nil
-		}
-		transport.IdleConnTimeout = timeout
-		transport.ResponseHeaderTimeout = timeout
-		return nil
-	}
-}
-
-// ClientConfig contains configuration of the client
-type ClientConfig struct {
-	// Addrs is a list of addresses to dial
-	Addrs []utils.NetAddr
-	// Dialer is a custom dialer, if provided
-	// is used instead of the list of addresses
-	Dialer ContextDialer
-	// KeepAlivePeriod defines period between keep alives
-	KeepAlivePeriod time.Duration
-	// KeepAliveCount specifies amount of missed keep alives
-	// to wait for until declaring connection as broken
-	KeepAliveCount int
-	// TLS is a TLS config
-	TLS *tls.Config
-}
-
-// CheckAndSetDefaults checks and sets default config values
-func (c *ClientConfig) CheckAndSetDefaults() error {
-	if len(c.Addrs) == 0 && c.Dialer == nil {
-		return trace.BadParameter("set parameter Addrs or Dialer")
-	}
-	if c.TLS == nil {
-		return trace.BadParameter("missing parameter TLS")
-	}
-	if c.KeepAlivePeriod == 0 {
-		c.KeepAlivePeriod = defaults.ServerKeepAliveTTL
-	}
-	if c.KeepAliveCount == 0 {
-		c.KeepAliveCount = defaults.KeepAliveCountMax
-	}
-	if c.Dialer == nil {
-		addrs := make([]string, len(c.Addrs))
-		for i, a := range c.Addrs {
-			addrs[i] = a.String()
-		}
-		var err error
-		if c.Dialer, err = api.NewAddrDialer(addrs, c.KeepAlivePeriod, defaults.DefaultDialTimeout); err != nil {
-			return err
-		}
-	}
-	if c.TLS.ServerName == "" {
-		c.TLS.ServerName = teleport.APIDomain
-	}
-	// this logic is necessary to force client to always send certificate
-	// regardless of the server setting, otherwise client may pick
-	// not to send the client certificate by looking at certificate request
-	if len(c.TLS.Certificates) != 0 {
-		cert := c.TLS.Certificates[0]
-		c.TLS.Certificates = nil
-		c.TLS.GetClientCertificate = func(_ *tls.CertificateRequestInfo) (*tls.Certificate, error) {
-			return &cert, nil
-		}
-	}
-
-	return nil
-}
-
-// NewTLSClient returns a new TLS client that uses mutual TLS authentication
-// and dials the remote server using dialer
-func NewTLSClient(cfg ClientConfig, params ...roundtrip.ClientParam) (*Client, error) {
+// NewClient returns a new client that uses mutual TLS authentication
+// and dials the remote server using dialer.
+func NewClient(cfg api.Config, params ...roundtrip.ClientParam) (*Client, error) {
 	if err := cfg.CheckAndSetDefaults(); err != nil {
 		return nil, trace.Wrap(err)
 	}
@@ -248,11 +143,84 @@ func NewTLSClient(cfg ClientConfig, params ...roundtrip.ClientParam) (*Client, e
 		return nil, trace.Wrap(err)
 	}
 	return &Client{
-		ClientConfig: cfg,
-		APIClient:    *apiClient,
-		Client:       *roundtripClient,
-		transport:    transport,
+		APIClient: *apiClient,
+		Client:    *roundtripClient,
+		transport: transport,
 	}, nil
+}
+
+// EncodeClusterName encodes cluster name in the SNI hostname
+func EncodeClusterName(clusterName string) string {
+	// hex is used to hide "." that will prevent wildcard *. entry to match
+	return fmt.Sprintf("%v.%v", hex.EncodeToString([]byte(clusterName)), teleport.APIDomain)
+}
+
+// DecodeClusterName decodes cluster name, returns NotFound
+// if no cluster name is encoded (empty subdomain),
+// so servers can detect cases when no server name passed
+// returns BadParameter if encoding does not match
+func DecodeClusterName(serverName string) (string, error) {
+	if serverName == teleport.APIDomain {
+		return "", trace.NotFound("no cluster name is encoded")
+	}
+	const suffix = "." + teleport.APIDomain
+	if !strings.HasSuffix(serverName, suffix) {
+		return "", trace.NotFound("no cluster name is encoded")
+	}
+	clusterName := strings.TrimSuffix(serverName, suffix)
+
+	decoded, err := hex.DecodeString(clusterName)
+	if err != nil {
+		return "", trace.BadParameter("failed to decode cluster name: %v", err)
+	}
+	return string(decoded), nil
+}
+
+// ClientTimeout sets idle and dial timeouts of the HTTP transport
+// used by the client.
+func ClientTimeout(timeout time.Duration) roundtrip.ClientParam {
+	return func(c *roundtrip.Client) error {
+		transport, ok := (c.HTTPClient().Transport).(*http.Transport)
+		if !ok {
+			return nil
+		}
+		transport.IdleConnTimeout = timeout
+		transport.ResponseHeaderTimeout = timeout
+		return nil
+	}
+}
+
+// ClientConfig contains configuration of the client
+// Deprecated, remove in 7.0
+type ClientConfig struct {
+	// Addrs is a list of addresses to dial
+	Addrs []utils.NetAddr
+	// Dialer is a custom dialer that is used instead of Addrs when provided
+	Dialer ContextDialer
+	// DialTimeout defines how long to attempt dialing before timing out
+	DialTimeout time.Duration
+	// KeepAlivePeriod defines period between keep alives
+	KeepAlivePeriod time.Duration
+	// KeepAliveCount specifies the amount of missed keep alives
+	// to wait for before declaring the connection as broken
+	KeepAliveCount int
+	// TLS is the client's TLS config
+	TLS *tls.Config
+}
+
+// NewTLSClient returns a new TLS client that uses mutual TLS authentication
+// and dials the remote server using dialer.
+// Deprecated, use NewClient instead, remove in 7.0.
+func NewTLSClient(cfg ClientConfig, params ...roundtrip.ClientParam) (*Client, error) {
+	c := api.Config{
+		Addrs:           utils.NetAddrsToStrings(cfg.Addrs),
+		Dialer:          cfg.Dialer,
+		DialTimeout:     cfg.DialTimeout,
+		KeepAlivePeriod: cfg.KeepAlivePeriod,
+		KeepAliveCount:  cfg.KeepAliveCount,
+		TLS:             cfg.TLS,
+	}
+	return NewClient(c, params...)
 }
 
 func (c *Client) GetTransport() *http.Transport {

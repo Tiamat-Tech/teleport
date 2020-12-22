@@ -35,6 +35,7 @@ import (
 	"golang.org/x/crypto/ssh"
 
 	"github.com/gravitational/teleport"
+	"github.com/gravitational/teleport/api"
 	"github.com/gravitational/teleport/api/proto"
 	"github.com/gravitational/teleport/lib/backend"
 	"github.com/gravitational/teleport/lib/defaults"
@@ -2377,11 +2378,11 @@ func (s *TLSSuite) TestCipherSuites(c *check.C) {
 		tls.TLS_RSA_WITH_AES_256_CBC_SHA,
 	}
 
-	addrs := []utils.NetAddr{
-		utils.FromAddr(otherServer.Listener.Addr()),
-		utils.FromAddr(s.server.Listener.Addr()),
+	addrs := []string{
+		otherServer.Addr().String(),
+		s.server.Addr().String(),
 	}
-	client, err := NewTLSClient(ClientConfig{
+	client, err := NewClient(api.Config{
 		Addrs: addrs,
 		TLS:   tlsConfig,
 	})
@@ -2401,11 +2402,11 @@ func (s *TLSSuite) TestTLSFailover(c *check.C) {
 	tlsConfig, err := s.server.ClientTLSConfig(TestNop())
 	c.Assert(err, check.IsNil)
 
-	addrs := []utils.NetAddr{
-		utils.FromAddr(otherServer.Listener.Addr()),
-		utils.FromAddr(s.server.Listener.Addr()),
+	addrs := []string{
+		otherServer.Addr().String(),
+		s.server.Addr().String(),
 	}
-	client, err := NewTLSClient(ClientConfig{Addrs: addrs, TLS: tlsConfig})
+	client, err := NewClient(api.Config{Addrs: addrs, TLS: tlsConfig})
 	c.Assert(err, check.IsNil)
 
 	// couple of runs to get enough connections

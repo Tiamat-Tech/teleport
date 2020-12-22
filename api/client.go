@@ -62,6 +62,45 @@ type Client struct {
 	closedFlag int32
 }
 
+// NewClient returns a new auth client that uses mutual TLS authentication and
+// connects to the remote server using the Dialer or Addrs given in Config.
+func NewClient(cfg Config) (*Client, error) {
+	if err := cfg.CheckAndSetDefaults(); err != nil {
+		return nil, trace.Wrap(err)
+	}
+
+	c := &Client{c: cfg}
+	dialer := grpc.WithContextDialer(func(ctx context.Context, addr string) (net.Conn, error) {
+		if c.isClosed() {
+			return nil, trace.ConnectionProblem(nil, "client is closed")
+		}
+		conn, err := c.c.Dialer.DialContext(ctx, "tcp", addr)
+		if err != nil {
+			return nil, trace.ConnectionProblem(err, "failed to dial")
+		}
+		return conn, nil
+	})
+
+	tlsConfig := c.c.TLS.Clone()
+	tlsConfig.NextProtos = []string{http2.NextProtoTLS}
+
+	var err error
+	if c.conn, err = grpc.Dial(teleport.APIDomain,
+		dialer,
+		grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig)),
+		grpc.WithKeepaliveParams(keepalive.ClientParameters{
+			Time:                c.c.KeepAlivePeriod,
+			Timeout:             c.c.KeepAlivePeriod * time.Duration(c.c.KeepAliveCount),
+			PermitWithoutStream: true,
+		}),
+	); err != nil {
+		return nil, trail.FromGRPC(err)
+	}
+
+	c.grpc = proto.NewAuthServiceClient(c.conn)
+	return c, nil
+}
+
 // Config contains configuration of the client
 type Config struct {
 	// Addrs is a list of teleport auth/proxy server addresses to dial
@@ -117,43 +156,9 @@ func (c *Client) TLSConfig() *tls.Config {
 	return c.c.TLS
 }
 
-// NewClient returns a new auth client that uses mutual TLS authentication and
-// connects to the remote server using the Dialer or Addrs given in Config.
-func NewClient(cfg Config) (*Client, error) {
-	if err := cfg.CheckAndSetDefaults(); err != nil {
-		return nil, trace.Wrap(err)
-	}
-
-	c := &Client{c: cfg}
-	dialer := grpc.WithContextDialer(func(ctx context.Context, addr string) (net.Conn, error) {
-		if c.isClosed() {
-			return nil, trace.ConnectionProblem(nil, "client is closed")
-		}
-		conn, err := c.c.Dialer.DialContext(ctx, "tcp", addr)
-		if err != nil {
-			return nil, trace.ConnectionProblem(err, "failed to dial")
-		}
-		return conn, nil
-	})
-
-	tlsConfig := c.c.TLS.Clone()
-	tlsConfig.NextProtos = []string{http2.NextProtoTLS}
-
-	var err error
-	if c.conn, err = grpc.Dial(teleport.APIDomain,
-		dialer,
-		grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig)),
-		grpc.WithKeepaliveParams(keepalive.ClientParameters{
-			Time:                c.c.KeepAlivePeriod,
-			Timeout:             c.c.KeepAlivePeriod * time.Duration(c.c.KeepAliveCount),
-			PermitWithoutStream: true,
-		}),
-	); err != nil {
-		return nil, trail.FromGRPC(err)
-	}
-
-	c.grpc = proto.NewAuthServiceClient(c.conn)
-	return c, nil
+// Dialer returns the client's connection dialer
+func (c *Client) Dialer() ContextDialer {
+	return c.c.Dialer
 }
 
 // Close closes the Client connection to the auth server
