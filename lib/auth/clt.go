@@ -66,7 +66,7 @@ type ContextDialerFunc = api.ContextDialerFunc
 type APIClient = api.Client
 
 // Client is the Auth API client. It works by connecting to auth servers
-// via gRPC and HTTP..
+// via gRPC and HTTP.
 //
 // When Teleport servers connect to auth API, they usually establish an SSH
 // tunnel first, and then do HTTP-over-SSH. This client is wrapped by auth.TunClient
@@ -158,10 +158,10 @@ func (c *ClientConfig) CheckAndSetDefaults() error {
 		return trace.BadParameter("missing parameter TLS")
 	}
 	if c.KeepAlivePeriod == 0 {
-		c.KeepAlivePeriod = api.ServerKeepAliveTTL
+		c.KeepAlivePeriod = defaults.ServerKeepAliveTTL
 	}
 	if c.KeepAliveCount == 0 {
-		c.KeepAliveCount = api.KeepAliveCountMax
+		c.KeepAliveCount = defaults.KeepAliveCountMax
 	}
 	if c.Dialer == nil {
 		addrs := make([]string, len(c.Addrs))
@@ -169,7 +169,7 @@ func (c *ClientConfig) CheckAndSetDefaults() error {
 			addrs[i] = a.String()
 		}
 		var err error
-		if c.Dialer, err = api.NewAddrDialer(addrs, c.KeepAlivePeriod, api.DefaultDialTimeout); err != nil {
+		if c.Dialer, err = api.NewAddrDialer(addrs, c.KeepAlivePeriod, defaults.DefaultDialTimeout); err != nil {
 			return err
 		}
 	}

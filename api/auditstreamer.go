@@ -1,0 +1,145 @@
+package api
+
+import (
+	"context"
+	"sync"
+
+	"github.com/gravitational/teleport/api/proto"
+	"github.com/gravitational/teleport/lib/events"
+	"github.com/gravitational/teleport/lib/session"
+
+	"github.com/gravitational/trace"
+	"github.com/gravitational/trace/trail"
+	"google.golang.org/grpc"
+	ggzip "google.golang.org/grpc/encoding/gzip"
+)
+
+// createOrResumeAuditStream creates or resumes audit stream described in the request.
+func (c *Client) createOrResumeAuditStream(ctx context.Context, request proto.AuditStreamRequest) (events.Stream, error) {
+	closeCtx, cancel := context.WithCancel(ctx)
+	stream, err := c.grpc.CreateAuditStream(closeCtx, grpc.UseCompressor(ggzip.Name))
+	if err != nil {
+		cancel()
+		return nil, trail.FromGRPC(err)
+	}
+	s := &auditStreamer{
+		stream:   stream,
+		statusCh: make(chan events.StreamStatus, 1),
+		closeCtx: closeCtx,
+		cancel:   cancel,
+	}
+	go s.recv()
+	err = s.stream.Send(&request)
+	if err != nil {
+		return nil, trace.NewAggregate(s.Close(ctx), trail.FromGRPC(err))
+	}
+	return s, nil
+}
+
+// ResumeAuditStream resumes existing audit stream.
+func (c *Client) ResumeAuditStream(ctx context.Context, sid session.ID, uploadID string) (events.Stream, error) {
+	return c.createOrResumeAuditStream(ctx, proto.AuditStreamRequest{
+		Request: &proto.AuditStreamRequest_ResumeStream{
+			ResumeStream: &proto.ResumeStream{
+				SessionID: string(sid),
+				UploadID:  uploadID,
+			}},
+	})
+}
+
+// CreateAuditStream creates new audit stream.
+func (c *Client) CreateAuditStream(ctx context.Context, sid session.ID) (events.Stream, error) {
+	return c.createOrResumeAuditStream(ctx, proto.AuditStreamRequest{
+		Request: &proto.AuditStreamRequest_CreateStream{
+			CreateStream: &proto.CreateStream{SessionID: string(sid)}},
+	})
+}
+
+type auditStreamer struct {
+	statusCh chan events.StreamStatus
+	mu       sync.RWMutex
+	stream   proto.AuthService_CreateAuditStreamClient
+	err      error
+	closeCtx context.Context
+	cancel   context.CancelFunc
+}
+
+// Close flushes non-uploaded flight stream data without marking
+// the stream completed and closes the stream instance.
+func (s *auditStreamer) Close(ctx context.Context) error {
+	defer s.closeWithError(nil)
+	return trail.FromGRPC(s.stream.Send(&proto.AuditStreamRequest{
+		Request: &proto.AuditStreamRequest_FlushAndCloseStream{
+			FlushAndCloseStream: &proto.FlushAndCloseStream{},
+		},
+	}))
+}
+
+// Complete completes stream.
+func (s *auditStreamer) Complete(ctx context.Context) error {
+	return trail.FromGRPC(s.stream.Send(&proto.AuditStreamRequest{
+		Request: &proto.AuditStreamRequest_CompleteStream{
+			CompleteStream: &proto.CompleteStream{},
+		},
+	}))
+}
+
+// Status returns a StreamStatus channel for the auditStreamer,
+// which can be received from to interact with new updates.
+func (s *auditStreamer) Status() <-chan events.StreamStatus {
+	return s.statusCh
+}
+
+// EmitAuditEvent emits audit event.
+func (s *auditStreamer) EmitAuditEvent(ctx context.Context, event events.AuditEvent) error {
+	oneof, err := events.ToOneOf(event)
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	err = trail.FromGRPC(s.stream.Send(&proto.AuditStreamRequest{
+		Request: &proto.AuditStreamRequest_Event{Event: oneof},
+	}))
+	if err != nil {
+		s.closeWithError(err)
+		return trace.Wrap(err)
+	}
+	return nil
+}
+
+// Done returns channel closed when streamer is closed.
+// Should be used to detect sending errors.
+func (s *auditStreamer) Done() <-chan struct{} {
+	return s.closeCtx.Done()
+}
+
+// Error returns last error of the stream.
+func (s *auditStreamer) Error() error {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.err
+}
+
+// recv is necessary to receive errors from the
+// server, otherwise no errors will be propagated.
+func (s *auditStreamer) recv() {
+	for {
+		status, err := s.stream.Recv()
+		if err != nil {
+			s.closeWithError(trail.FromGRPC(err))
+			return
+		}
+		select {
+		case <-s.closeCtx.Done():
+			return
+		case s.statusCh <- *status:
+		default:
+		}
+	}
+}
+
+func (s *auditStreamer) closeWithError(err error) {
+	s.cancel()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.err = err
+}

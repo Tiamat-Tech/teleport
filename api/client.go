@@ -23,22 +23,20 @@ import (
 	"crypto/tls"
 	"io"
 	"net"
-	"sync"
 	"sync/atomic"
 	"time"
 
-	"golang.org/x/net/http2"
-
 	"github.com/gravitational/teleport"
 	"github.com/gravitational/teleport/api/proto"
+	"github.com/gravitational/teleport/lib/defaults"
 	"github.com/gravitational/teleport/lib/events"
 	"github.com/gravitational/teleport/lib/jwt"
 	"github.com/gravitational/teleport/lib/services"
-	"github.com/gravitational/teleport/lib/session"
-	"github.com/gravitational/trace"
-	"github.com/gravitational/trace/trail"
 
 	"github.com/golang/protobuf/ptypes/empty"
+	"github.com/gravitational/trace"
+	"github.com/gravitational/trace/trail"
+	"golang.org/x/net/http2"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	ggzip "google.golang.org/grpc/encoding/gzip"
@@ -93,18 +91,18 @@ func (c *Config) CheckAndSetDefaults() error {
 		return trace.BadParameter("missing parameter TLS")
 	}
 	if c.KeepAlivePeriod == 0 {
-		c.KeepAlivePeriod = ServerKeepAliveTTL
+		c.KeepAlivePeriod = defaults.ServerKeepAliveTTL
 	}
 	if c.KeepAliveCount == 0 {
-		c.KeepAliveCount = KeepAliveCountMax
+		c.KeepAliveCount = defaults.KeepAliveCountMax
 	}
 	if c.DialTimeout == 0 {
-		c.DialTimeout = DefaultDialTimeout
+		c.DialTimeout = defaults.DefaultDialTimeout
 	}
 	if c.Dialer == nil {
 		var err error
 		if c.Dialer, err = NewAddrDialer(c.Addrs, c.KeepAlivePeriod, c.DialTimeout); err != nil {
-			return err
+			return trace.Wrap(err)
 		}
 	}
 	if c.TLS.ServerName == "" {
@@ -175,7 +173,7 @@ func (c *Client) isClosed() bool {
 	return atomic.LoadInt32(&c.closedFlag) == 1
 }
 
-// set Client closedFlag to 1 and return whether it was changed.
+// setClosed sets closedFlag to 1 and return whether it was changed.
 func (c *Client) setClosed() bool {
 	return atomic.CompareAndSwapInt32(&c.closedFlag, 0, 1)
 }
@@ -204,176 +202,6 @@ func (c *Client) UpsertNode(s services.Server) (*services.KeepAlive, error) {
 		return nil, trail.FromGRPC(err)
 	}
 	return keepAlive, nil
-}
-
-// NewKeepAliver returns a new instance of keep aliver.
-// Run k.Close to release the keepAliver and its goroutines
-func (c *Client) NewKeepAliver(ctx context.Context) (services.KeepAliver, error) {
-	cancelCtx, cancel := context.WithCancel(ctx)
-	stream, err := c.grpc.SendKeepAlives(cancelCtx)
-	if err != nil {
-		cancel()
-		return nil, trail.FromGRPC(err)
-	}
-	k := &streamKeepAliver{
-		stream:      stream,
-		ctx:         cancelCtx,
-		cancel:      cancel,
-		keepAlivesC: make(chan services.KeepAlive),
-	}
-	go k.forwardKeepAlives()
-	go k.recv()
-	return k, nil
-}
-
-type streamKeepAliver struct {
-	mu          sync.RWMutex
-	stream      proto.AuthService_SendKeepAlivesClient
-	ctx         context.Context
-	cancel      context.CancelFunc
-	keepAlivesC chan services.KeepAlive
-	err         error
-}
-
-// KeepAlives returns the streamKeepAliver's channel of KeepAlives
-func (k *streamKeepAliver) KeepAlives() chan<- services.KeepAlive {
-	return k.keepAlivesC
-}
-
-func (k *streamKeepAliver) forwardKeepAlives() {
-	for {
-		select {
-		case <-k.ctx.Done():
-			return
-		case keepAlive := <-k.keepAlivesC:
-			err := k.stream.Send(&keepAlive)
-			if err != nil {
-				k.closeWithError(trail.FromGRPC(err))
-				return
-			}
-		}
-	}
-}
-
-// Error returns the streamKeepAliver's error after closing
-func (k *streamKeepAliver) Error() error {
-	k.mu.RLock()
-	defer k.mu.RUnlock()
-	return k.err
-}
-
-// Done returns a channel that closes once the streamKeepAliver is Closed
-func (k *streamKeepAliver) Done() <-chan struct{} {
-	return k.ctx.Done()
-}
-
-// recv is necessary to receive errors from the
-// server, otherwise no errors will be propagated
-func (k *streamKeepAliver) recv() {
-	err := k.stream.RecvMsg(&empty.Empty{})
-	k.closeWithError(trail.FromGRPC(err))
-}
-
-func (k *streamKeepAliver) closeWithError(err error) {
-	k.mu.Lock()
-	defer k.mu.Unlock()
-	k.Close()
-	k.err = err
-}
-
-// Close the streamKeepAliver
-func (k *streamKeepAliver) Close() error {
-	k.cancel()
-	return nil
-}
-
-// NewWatcher returns a new streamWatcher
-func (c *Client) NewWatcher(ctx context.Context, watch services.Watch) (services.Watcher, error) {
-	cancelCtx, cancel := context.WithCancel(ctx)
-	var protoWatch proto.Watch
-	for _, k := range watch.Kinds {
-		protoWatch.Kinds = append(protoWatch.Kinds, proto.WatchKind{
-			Name:        k.Name,
-			Kind:        k.Kind,
-			LoadSecrets: k.LoadSecrets,
-			Filter:      k.Filter,
-		})
-	}
-	stream, err := c.grpc.WatchEvents(cancelCtx, &protoWatch)
-	if err != nil {
-		cancel()
-		return nil, trail.FromGRPC(err)
-	}
-	w := &streamWatcher{
-		stream:  stream,
-		ctx:     cancelCtx,
-		cancel:  cancel,
-		eventsC: make(chan services.Event),
-	}
-	go w.receiveEvents()
-	return w, nil
-}
-
-type streamWatcher struct {
-	mu      sync.RWMutex
-	stream  proto.AuthService_WatchEventsClient
-	ctx     context.Context
-	cancel  context.CancelFunc
-	eventsC chan services.Event
-	err     error
-}
-
-// Error returns the streamWatcher's error
-func (w *streamWatcher) Error() error {
-	w.mu.RLock()
-	defer w.mu.RUnlock()
-	if w.err == nil {
-		return trace.Wrap(w.ctx.Err())
-	}
-	return w.err
-}
-
-func (w *streamWatcher) closeWithError(err error) {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	w.Close()
-	w.err = err
-}
-
-// Events returns the streamWatcher's events channel
-func (w *streamWatcher) Events() <-chan services.Event {
-	return w.eventsC
-}
-
-func (w *streamWatcher) receiveEvents() {
-	for {
-		event, err := w.stream.Recv()
-		if err != nil {
-			w.closeWithError(trail.FromGRPC(err))
-			return
-		}
-		out, err := EventFromGRPC(*event)
-		if err != nil {
-			w.closeWithError(trail.FromGRPC(err))
-			return
-		}
-		select {
-		case w.eventsC <- *out:
-		case <-w.Done():
-			return
-		}
-	}
-}
-
-// Done returns a channel that closes once the streamWatcher is Closed
-func (w *streamWatcher) Done() <-chan struct{} {
-	return w.ctx.Done()
-}
-
-// Close the streamWatcher
-func (w *streamWatcher) Close() error {
-	w.cancel()
-	return nil
 }
 
 // UpdateRemoteCluster updates remote cluster from the specified value.
@@ -466,136 +294,6 @@ func (c *Client) GenerateUserCerts(ctx context.Context, req proto.UserCertsReque
 	return certs, nil
 }
 
-// createOrResumeAuditStream creates or resumes audit stream described in the request.
-func (c *Client) createOrResumeAuditStream(ctx context.Context, request proto.AuditStreamRequest) (events.Stream, error) {
-	closeCtx, cancel := context.WithCancel(ctx)
-	stream, err := c.grpc.CreateAuditStream(closeCtx, grpc.UseCompressor(ggzip.Name))
-	if err != nil {
-		cancel()
-		return nil, trail.FromGRPC(err)
-	}
-	s := &auditStreamer{
-		stream:   stream,
-		statusCh: make(chan events.StreamStatus, 1),
-		closeCtx: closeCtx,
-		cancel:   cancel,
-	}
-	go s.recv()
-	err = s.stream.Send(&request)
-	if err != nil {
-		return nil, trace.NewAggregate(s.Close(ctx), trail.FromGRPC(err))
-	}
-	return s, nil
-}
-
-// ResumeAuditStream resumes existing audit stream.
-func (c *Client) ResumeAuditStream(ctx context.Context, sid session.ID, uploadID string) (events.Stream, error) {
-	return c.createOrResumeAuditStream(ctx, proto.AuditStreamRequest{
-		Request: &proto.AuditStreamRequest_ResumeStream{
-			ResumeStream: &proto.ResumeStream{
-				SessionID: string(sid),
-				UploadID:  uploadID,
-			}},
-	})
-}
-
-// CreateAuditStream creates new audit stream.
-func (c *Client) CreateAuditStream(ctx context.Context, sid session.ID) (events.Stream, error) {
-	return c.createOrResumeAuditStream(ctx, proto.AuditStreamRequest{
-		Request: &proto.AuditStreamRequest_CreateStream{
-			CreateStream: &proto.CreateStream{SessionID: string(sid)}},
-	})
-}
-
-type auditStreamer struct {
-	statusCh chan events.StreamStatus
-	mu       sync.RWMutex
-	stream   proto.AuthService_CreateAuditStreamClient
-	err      error
-	closeCtx context.Context
-	cancel   context.CancelFunc
-}
-
-// Close flushes non-uploaded flight stream data without marking
-// the stream completed and closes the stream instance.
-func (s *auditStreamer) Close(ctx context.Context) error {
-	defer s.closeWithError(nil)
-	return trail.FromGRPC(s.stream.Send(&proto.AuditStreamRequest{
-		Request: &proto.AuditStreamRequest_FlushAndCloseStream{
-			FlushAndCloseStream: &proto.FlushAndCloseStream{},
-		},
-	}))
-}
-
-// Complete completes stream.
-func (s *auditStreamer) Complete(ctx context.Context) error {
-	return trail.FromGRPC(s.stream.Send(&proto.AuditStreamRequest{
-		Request: &proto.AuditStreamRequest_CompleteStream{
-			CompleteStream: &proto.CompleteStream{},
-		},
-	}))
-}
-
-// Status returns a StreamStatus channel for the auditStreamer,
-// which can be received from to interact with new updates.
-func (s *auditStreamer) Status() <-chan events.StreamStatus {
-	return s.statusCh
-}
-
-// EmitAuditEvent emits audit event.
-func (s *auditStreamer) EmitAuditEvent(ctx context.Context, event events.AuditEvent) error {
-	oneof, err := events.ToOneOf(event)
-	if err != nil {
-		return trace.Wrap(err)
-	}
-	err = trail.FromGRPC(s.stream.Send(&proto.AuditStreamRequest{
-		Request: &proto.AuditStreamRequest_Event{Event: oneof},
-	}))
-	if err != nil {
-		s.closeWithError(err)
-		return trace.Wrap(err)
-	}
-	return nil
-}
-
-// Done returns channel closed when streamer is closed.
-// Should be used to detect sending errors.
-func (s *auditStreamer) Done() <-chan struct{} {
-	return s.closeCtx.Done()
-}
-
-// Error returns last error of the stream.
-func (s *auditStreamer) Error() error {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return s.err
-}
-
-// recv is necessary to receive errors from the
-// server, otherwise no errors will be propagated.
-func (s *auditStreamer) recv() {
-	for {
-		status, err := s.stream.Recv()
-		if err != nil {
-			s.closeWithError(trail.FromGRPC(err))
-			return
-		}
-		select {
-		case <-s.closeCtx.Done():
-			return
-		case s.statusCh <- *status:
-		default:
-		}
-	}
-}
-
-func (s *auditStreamer) closeWithError(err error) {
-	s.cancel()
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.err = err
-}
-
 // EmitAuditEvent sends an auditable event to the auth server.
 func (c *Client) EmitAuditEvent(ctx context.Context, event events.AuditEvent) error {
 	grpcEvent, err := events.ToOneOf(event)
@@ -673,31 +371,6 @@ func (c *Client) CreateResetPasswordToken(ctx context.Context, req *proto.Create
 func (c *Client) DeleteAccessRequest(ctx context.Context, reqID string) error {
 	_, err := c.grpc.DeleteAccessRequest(ctx, &proto.RequestID{ID: reqID})
 	return trail.FromGRPC(err)
-}
-
-type contextKey string
-
-const (
-	// ContextDelegator is a delegator for access requests set in the context
-	// of the request
-	ContextDelegator contextKey = "delegator"
-)
-
-// getDelegator attempts to load the context value AccessRequestDelegator,
-// returning the empty string if no value was found.
-func GetDelegator(ctx context.Context) string {
-	delegator, ok := ctx.Value(ContextDelegator).(string)
-	if !ok {
-		return ""
-	}
-	return delegator
-}
-
-// WithDelegator creates a child context with the AccessRequestDelegator
-// value set.  Optionally used by AuthServer.SetAccessRequestState to log
-// a delegating identity.
-func WithDelegator(ctx context.Context, delegator string) context.Context {
-	return context.WithValue(ctx, ContextDelegator, delegator)
 }
 
 // SetAccessRequestState updates the state of an existing access request.
