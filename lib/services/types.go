@@ -1,6 +1,7 @@
 package services
 
 import (
+	"github.com/gravitational/teleport/api/constants"
 	"github.com/gravitational/teleport/api/types"
 )
 
@@ -49,8 +50,8 @@ type WebSessionSpecV2 = types.WebSessionSpecV2
 
 // Some functions and variables also need to be imported from the types package
 var (
-	MaxDuration           = api.MaxDuration
-	NewDuration           = api.NewDuration
+	MaxDuration           = types.MaxDuration
+	NewDuration           = types.NewDuration
 	IsValidLabelKey       = types.IsValidLabelKey
 	MetadataSchema        = types.MetadataSchema
 	RequestState_NONE     = types.RequestState_NONE
@@ -62,67 +63,67 @@ var (
 // The following Constants are imported from api to simplify
 // refactoring. These could be removed and their references updated.
 const (
-	DefaultAPIGroup               = api.DefaultAPIGroup
-	ActionRead                    = api.ActionRead
-	ActionWrite                   = api.ActionWrite
-	Wildcard                      = api.Wildcard
-	KindNamespace                 = api.KindNamespace
-	KindUser                      = api.KindUser
-	KindKeyPair                   = api.KindKeyPair
-	KindHostCert                  = api.KindHostCert
-	KindJWT                       = api.KindJWT
-	KindLicense                   = api.KindLicense
-	KindRole                      = api.KindRole
-	KindAccessRequest             = api.KindAccessRequest
-	KindPluginData                = api.KindPluginData
-	KindOIDC                      = api.KindOIDC
-	KindSAML                      = api.KindSAML
-	KindGithub                    = api.KindGithub
-	KindOIDCRequest               = api.KindOIDCRequest
-	KindSAMLRequest               = api.KindSAMLRequest
-	KindGithubRequest             = api.KindGithubRequest
-	KindSession                   = api.KindSession
-	KindSSHSession                = api.KindSSHSession
-	KindWebSession                = api.KindWebSession
-	KindAppSession                = api.KindAppSession
-	KindEvent                     = api.KindEvent
-	KindAuthServer                = api.KindAuthServer
-	KindProxy                     = api.KindProxy
-	KindNode                      = api.KindNode
-	KindAppServer                 = api.KindAppServer
-	KindToken                     = api.KindToken
-	KindCertAuthority             = api.KindCertAuthority
-	KindReverseTunnel             = api.KindReverseTunnel
-	KindOIDCConnector             = api.KindOIDCConnector
-	KindSAMLConnector             = api.KindSAMLConnector
-	KindGithubConnector           = api.KindGithubConnector
-	KindConnectors                = api.KindConnectors
-	KindClusterAuthPreference     = api.KindClusterAuthPreference
-	MetaNameClusterAuthPreference = api.MetaNameClusterAuthPreference
-	KindClusterConfig             = api.KindClusterConfig
-	KindSemaphore                 = api.KindSemaphore
-	MetaNameClusterConfig         = api.MetaNameClusterConfig
-	KindClusterName               = api.KindClusterName
-	MetaNameClusterName           = api.MetaNameClusterName
-	KindStaticTokens              = api.KindStaticTokens
-	MetaNameStaticTokens          = api.MetaNameStaticTokens
-	KindTrustedCluster            = api.KindTrustedCluster
-	KindAuthConnector             = api.KindAuthConnector
-	KindTunnelConnection          = api.KindTunnelConnection
-	KindRemoteCluster             = api.KindRemoteCluster
-	KindResetPasswordToken        = api.KindResetPasswordToken
-	KindResetPasswordTokenSecrets = api.KindResetPasswordTokenSecrets
-	KindIdentity                  = api.KindIdentity
-	KindState                     = api.KindState
-	KindKubeService               = api.KindKubeService
-	V3                            = api.V3
-	V2                            = api.V2
-	V1                            = api.V1
-	VerbList                      = api.VerbList
-	VerbCreate                    = api.VerbCreate
-	VerbRead                      = api.VerbRead
-	VerbReadNoSecrets             = api.VerbReadNoSecrets
-	VerbUpdate                    = api.VerbUpdate
-	VerbDelete                    = api.VerbDelete
-	VerbRotate                    = api.VerbRotate
+	DefaultAPIGroup               = constants.DefaultAPIGroup
+	ActionRead                    = constants.ActionRead
+	ActionWrite                   = constants.ActionWrite
+	Wildcard                      = constants.Wildcard
+	KindNamespace                 = constants.KindNamespace
+	KindUser                      = constants.KindUser
+	KindKeyPair                   = constants.KindKeyPair
+	KindHostCert                  = constants.KindHostCert
+	KindJWT                       = constants.KindJWT
+	KindLicense                   = constants.KindLicense
+	KindRole                      = constants.KindRole
+	KindAccessRequest             = constants.KindAccessRequest
+	KindPluginData                = constants.KindPluginData
+	KindOIDC                      = constants.KindOIDC
+	KindSAML                      = constants.KindSAML
+	KindGithub                    = constants.KindGithub
+	KindOIDCRequest               = constants.KindOIDCRequest
+	KindSAMLRequest               = constants.KindSAMLRequest
+	KindGithubRequest             = constants.KindGithubRequest
+	KindSession                   = constants.KindSession
+	KindSSHSession                = constants.KindSSHSession
+	KindWebSession                = constants.KindWebSession
+	KindAppSession                = constants.KindAppSession
+	KindEvent                     = constants.KindEvent
+	KindAuthServer                = constants.KindAuthServer
+	KindProxy                     = constants.KindProxy
+	KindNode                      = constants.KindNode
+	KindAppServer                 = constants.KindAppServer
+	KindToken                     = constants.KindToken
+	KindCertAuthority             = constants.KindCertAuthority
+	KindReverseTunnel             = constants.KindReverseTunnel
+	KindOIDCConnector             = constants.KindOIDCConnector
+	KindSAMLConnector             = constants.KindSAMLConnector
+	KindGithubConnector           = constants.KindGithubConnector
+	KindConnectors                = constants.KindConnectors
+	KindClusterAuthPreference     = constants.KindClusterAuthPreference
+	MetaNameClusterAuthPreference = constants.MetaNameClusterAuthPreference
+	KindClusterConfig             = constants.KindClusterConfig
+	KindSemaphore                 = constants.KindSemaphore
+	MetaNameClusterConfig         = constants.MetaNameClusterConfig
+	KindClusterName               = constants.KindClusterName
+	MetaNameClusterName           = constants.MetaNameClusterName
+	KindStaticTokens              = constants.KindStaticTokens
+	MetaNameStaticTokens          = constants.MetaNameStaticTokens
+	KindTrustedCluster            = constants.KindTrustedCluster
+	KindAuthConnector             = constants.KindAuthConnector
+	KindTunnelConnection          = constants.KindTunnelConnection
+	KindRemoteCluster             = constants.KindRemoteCluster
+	KindResetPasswordToken        = constants.KindResetPasswordToken
+	KindResetPasswordTokenSecrets = constants.KindResetPasswordTokenSecrets
+	KindIdentity                  = constants.KindIdentity
+	KindState                     = constants.KindState
+	KindKubeService               = constants.KindKubeService
+	V3                            = constants.V3
+	V2                            = constants.V2
+	V1                            = constants.V1
+	VerbList                      = constants.VerbList
+	VerbCreate                    = constants.VerbCreate
+	VerbRead                      = constants.VerbRead
+	VerbReadNoSecrets             = constants.VerbReadNoSecrets
+	VerbUpdate                    = constants.VerbUpdate
+	VerbDelete                    = constants.VerbDelete
+	VerbRotate                    = constants.VerbRotate
 )
