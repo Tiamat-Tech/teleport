@@ -312,23 +312,6 @@ func UnmarshalResource(kind string, raw []byte, opts ...MarshalOption) (Resource
 	return u, nil
 }
 
-// V2SchemaTemplate is a template JSON Schema for V2 style objects
-const V2SchemaTemplate = `{
-  "type": "object",
-  "additionalProperties": false,
-  "required": ["kind", "spec", "metadata", "version"],
-  "properties": {
-    "kind": {"type": "string"},
-    "sub_kind": {"type": "string"},
-    "version": {"type": "string", "default": "v2"},
-    "metadata": %v,
-    "spec": %v
-  }%v
-}`
-
-// DefaultDefinitions the default list of JSON schema definitions which is none.
-const DefaultDefinitions = ``
-
 // UnknownResource is used to detect resources
 type UnknownResource struct {
 	types.ResourceHeader

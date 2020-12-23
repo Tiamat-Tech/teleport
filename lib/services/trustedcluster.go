@@ -229,17 +229,6 @@ func (r RoleMap) Check() error {
 	return trace.Wrap(err)
 }
 
-// Equals checks if the two role mappings are equal.
-func (r RoleMapping) Equals(o RoleMapping) bool {
-	if r.Remote != o.Remote {
-		return false
-	}
-	if !utils.StringSlicesEqual(r.Local, r.Local) {
-		return false
-	}
-	return true
-}
-
 // Check checks validity of all parameters and sets defaults
 func (c *TrustedClusterV2) CheckAndSetDefaults() error {
 	// make sure we have defaults for all fields

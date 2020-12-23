@@ -16,14 +16,15 @@ limitations under the License.
 
 package types
 
-import "github.com/gravitational/teleport/lib/backend"
+import "github.com/gravitational/teleport/lib/utils"
 
-// Event represents an event that happened in the backend
-type Event struct {
-	// Type is the event type
-	Type backend.OpType
-	// Resource is a modified or deleted resource
-	// in case of deleted resources, only resource header
-	// will be provided
-	Resource Resource
+// Equals checks if the two role mappings are equal.
+func (r RoleMapping) Equals(o RoleMapping) bool {
+	if r.Remote != o.Remote {
+		return false
+	}
+	if !utils.StringSlicesEqual(r.Local, r.Local) {
+		return false
+	}
+	return true
 }

@@ -39,6 +39,11 @@ type Resource = types.Resource
 type ResourceHeader struct{ types.ResourceHeader }
 type Metadata = types.Metadata
 
+type ReverseTunnelV1 = types.ReverseTunnelV1
+type ReverseTunnelV2 = types.ReverseTunnelV2
+type ReverseTunnelSpecV2 = types.ReverseTunnelSpecV2
+type TunnelType = types.TunnelType
+
 type Role = types.Role
 type RoleV3 = types.RoleV3
 type RoleSpecV3 = types.RoleSpecV3
@@ -48,6 +53,8 @@ type RoleOptions = types.RoleOptions
 type Rule = types.Rule
 type Labels = types.Labels
 
+type RoleMapping = types.RoleMapping
+
 type WebSessionV2 struct{ types.WebSessionV2 }
 type WebSessionSpecV2 = types.WebSessionSpecV2
 
@@ -55,6 +62,10 @@ type WebSessionSpecV2 = types.WebSessionSpecV2
 var (
 	NewRule       = types.NewRule
 	NewBoolOption = types.NewBoolOption
+
+	GetReverseTunnelSchema = types.GetReverseTunnelSchema
+	V2SchemaTemplate       = types.V2SchemaTemplate
+	DefaultDefinitions     = types.DefaultDefinitions
 
 	MaxDuration           = types.MaxDuration
 	NewDuration           = types.NewDuration
@@ -67,7 +78,17 @@ var (
 	RequestState_DENIED   = types.RequestState_DENIED
 )
 
-// The following Constants are imported from api to simplify
+// The following constants are imported from api/types to simplify
+// refactoring. These could be removed and their references updated.
+
+const (
+	NodeTunnel  = types.NodeTunnel
+	ProxyTunnel = types.ProxyTunnel
+	AppTunnel   = types.AppTunnel
+	KubeTunnel  = types.KubeTunnel
+)
+
+// The following Constants are imported from api/constants to simplify
 // refactoring. These could be removed and their references updated.
 const (
 	DefaultAPIGroup               = constants.DefaultAPIGroup

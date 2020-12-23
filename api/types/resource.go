@@ -1,12 +1,29 @@
+/*
+Copyright 2020 Gravitational, Inc.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
 package types
 
 import (
-	fmt "fmt"
+	"fmt"
 	"regexp"
-	time "time"
+	"time"
 
 	"github.com/gravitational/teleport/lib/defaults"
 	"github.com/gravitational/teleport/lib/utils"
+
 	"github.com/gravitational/trace"
 	"github.com/jonboulle/clockwork"
 )
@@ -179,6 +196,9 @@ func IsValidLabelKey(s string) bool {
 // MetadataSchema is a schema for resource metadata
 var MetadataSchema = fmt.Sprintf(baseMetadataSchema, labelPattern)
 
+// DefaultDefinitions the default list of JSON schema definitions which is none.
+const DefaultDefinitions = ``
+
 const baseMetadataSchema = `{
   "type": "object",
   "additionalProperties": false,
@@ -199,3 +219,17 @@ const baseMetadataSchema = `{
     }
   }
 }`
+
+// V2SchemaTemplate is a template JSON Schema for V2 style objects
+const V2SchemaTemplate = `{
+	"type": "object",
+	"additionalProperties": false,
+	"required": ["kind", "spec", "metadata", "version"],
+	"properties": {
+	  "kind": {"type": "string"},
+	  "sub_kind": {"type": "string"},
+	  "version": {"type": "string", "default": "v2"},
+	  "metadata": %v,
+	  "spec": %v
+	}%v
+  }`
