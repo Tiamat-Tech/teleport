@@ -1,21 +1,21 @@
 package types
 
 import (
+	"encoding/json"
 	fmt "fmt"
+	"strings"
 	time "time"
 
+	"github.com/gravitational/teleport"
+	"github.com/gravitational/teleport/api/constants"
+	"github.com/gravitational/teleport/lib/defaults"
 	"github.com/gravitational/teleport/lib/utils"
+	"github.com/gravitational/teleport/lib/utils/parse"
+	"github.com/gravitational/teleport/lib/wrappers"
+	"github.com/gravitational/trace"
 	"github.com/jonboulle/clockwork"
-)
-
-// RoleConditionType specifies if it's an allow rule (true) or deny rule (false).
-type RoleConditionType bool
-
-const (
-	// Allow is the set of conditions that allow access.
-	Allow RoleConditionType = true
-	// Deny is the set of conditions that prevent access.
-	Deny RoleConditionType = false
+	"github.com/vulcand/predicate"
+	"google.golang.org/protobuf/proto"
 )
 
 // Role contains a set of permissions or settings
@@ -27,9 +27,6 @@ type Role interface {
 	// Equals returns true if the roles are equal. Roles are equal if options and
 	// conditions match.
 	Equals(other Role) bool
-	// ApplyTraits applies the passed in traits to any variables within the role
-	// and returns itself.
-	ApplyTraits(map[string][]string) Role
 
 	// GetOptions gets role options.
 	GetOptions() RoleOptions
@@ -89,6 +86,16 @@ type Role interface {
 	SetAccessRequestConditions(RoleConditionType, AccessRequestConditions)
 }
 
+// RoleConditionType specifies if it's an allow rule (true) or deny rule (false).
+type RoleConditionType bool
+
+const (
+	// Allow is the set of conditions that allow access.
+	Allow RoleConditionType = true
+	// Deny is the set of conditions that prevent access.
+	Deny RoleConditionType = false
+)
+
 // Equals returns true if the roles are equal. Roles are equal if options,
 // namespaces, logins, labels, and conditions match.
 func (r *RoleV3) Equals(other Role) bool {
@@ -97,10 +104,10 @@ func (r *RoleV3) Equals(other Role) bool {
 	}
 
 	for _, condition := range []RoleConditionType{Allow, Deny} {
-		if !utils.StringSlicesEqual(r.GetLogins(condition), other.GetLogins(condition)) {
+		if !StringSlicesEqual(r.GetLogins(condition), other.GetLogins(condition)) {
 			return false
 		}
-		if !utils.StringSlicesEqual(r.GetNamespaces(condition), other.GetNamespaces(condition)) {
+		if !StringSlicesEqual(r.GetNamespaces(condition), other.GetNamespaces(condition)) {
 			return false
 		}
 		if !r.GetNodeLabels(condition).Equals(other.GetNodeLabels(condition)) {
@@ -152,8 +159,6 @@ func (r *RoleV3) GetResourceID() int64 {
 func (r *RoleV3) SetResourceID(id int64) {
 	r.Metadata.ID = id
 }
-
-// TODO: ApplyTraits would go here
 
 // SetExpiry sets expiry time for the object.
 func (r *RoleV3) SetExpiry(expires time.Time) {
@@ -379,7 +384,113 @@ func (r *RoleV3) SetRules(rct RoleConditionType, in []Rule) {
 	}
 }
 
-// TODO: CheckAndSetDefaults
+// CheckAndSetDefaults checks validity of all parameters and sets defaults
+func (r *RoleV3) CheckAndSetDefaults() error {
+	err := r.Metadata.CheckAndSetDefaults()
+	if err != nil {
+		return trace.Wrap(err)
+	}
+
+	// Make sure all fields have defaults.
+	if r.Spec.Options.CertificateFormat == "" {
+		r.Spec.Options.CertificateFormat = teleport.CertificateFormatStandard
+	}
+	if r.Spec.Options.MaxSessionTTL.Value() == 0 {
+		r.Spec.Options.MaxSessionTTL = NewDuration(defaults.MaxCertDuration)
+	}
+	if r.Spec.Options.PortForwarding == nil {
+		r.Spec.Options.PortForwarding = NewBoolOption(true)
+	}
+	if len(r.Spec.Options.BPF) == 0 {
+		r.Spec.Options.BPF = defaults.EnhancedEvents()
+	}
+	if r.Spec.Allow.Namespaces == nil {
+		r.Spec.Allow.Namespaces = []string{defaults.Namespace}
+	}
+	if r.Spec.Allow.NodeLabels == nil {
+		if len(r.Spec.Allow.Logins) == 0 {
+			// no logins implies no node access
+			r.Spec.Allow.NodeLabels = Labels{}
+		} else {
+			r.Spec.Allow.NodeLabels = Labels{constants.Wildcard: []string{constants.Wildcard}}
+		}
+	}
+
+	if r.Spec.Allow.AppLabels == nil {
+		r.Spec.Allow.AppLabels = Labels{constants.Wildcard: []string{constants.Wildcard}}
+	}
+
+	if r.Spec.Allow.KubernetesLabels == nil {
+		r.Spec.Allow.KubernetesLabels = Labels{constants.Wildcard: []string{constants.Wildcard}}
+	}
+
+	if r.Spec.Deny.Namespaces == nil {
+		r.Spec.Deny.Namespaces = []string{defaults.Namespace}
+	}
+
+	// Validate that enhanced recording options are all valid.
+	for _, opt := range r.Spec.Options.BPF {
+		if opt == teleport.EnhancedRecordingCommand ||
+			opt == teleport.EnhancedRecordingDisk ||
+			opt == teleport.EnhancedRecordingNetwork {
+			continue
+		}
+		return trace.BadParameter("found invalid option in session_recording: %v", opt)
+	}
+
+	// if we find {{ or }} but the syntax is invalid, the role is invalid
+	for _, condition := range []RoleConditionType{Allow, Deny} {
+		for _, login := range r.GetLogins(condition) {
+			if strings.Contains(login, "{{") || strings.Contains(login, "}}") {
+				_, err := parse.NewExpression(login)
+				if err != nil {
+					return trace.BadParameter("invalid login found: %v", login)
+				}
+			}
+		}
+	}
+
+	// check and correct the session ttl
+	if r.Spec.Options.MaxSessionTTL.Value() <= 0 {
+		r.Spec.Options.MaxSessionTTL = NewDuration(defaults.MaxCertDuration)
+	}
+
+	// restrict wildcards
+	for _, login := range r.Spec.Allow.Logins {
+		if login == constants.Wildcard {
+			return trace.BadParameter("wildcard matcher is not allowed in logins")
+		}
+	}
+	for key, val := range r.Spec.Allow.NodeLabels {
+		if key == constants.Wildcard && !(len(val) == 1 && val[0] == constants.Wildcard) {
+			return trace.BadParameter("selector *:<val> is not supported")
+		}
+	}
+	for key, val := range r.Spec.Allow.AppLabels {
+		if key == constants.Wildcard && !(len(val) == 1 && val[0] == constants.Wildcard) {
+			return trace.BadParameter("selector *:<val> is not supported")
+		}
+	}
+	for key, val := range r.Spec.Allow.KubernetesLabels {
+		if key == constants.Wildcard && !(len(val) == 1 && val[0] == constants.Wildcard) {
+			return trace.BadParameter("selector *:<val> is not supported")
+		}
+	}
+	for i := range r.Spec.Allow.Rules {
+		err := r.Spec.Allow.Rules[i].CheckAndSetDefaults()
+		if err != nil {
+			return trace.BadParameter("failed to process 'allow' rule %v: %v", i, err)
+		}
+	}
+	for i := range r.Spec.Deny.Rules {
+		err := r.Spec.Deny.Rules[i].CheckAndSetDefaults()
+		if err != nil {
+			return trace.BadParameter("failed to process 'deny' rule %v: %v", i, err)
+		}
+	}
+
+	return nil
+}
 
 // String returns the human readable representation of a role.
 func (r *RoleV3) String() string {
@@ -395,16 +506,16 @@ func (o RoleOptions) Equals(other RoleOptions) bool {
 		o.CertificateFormat == other.CertificateFormat &&
 		o.ClientIdleTimeout.Value() == other.ClientIdleTimeout.Value() &&
 		o.DisconnectExpiredCert.Value() == other.DisconnectExpiredCert.Value() &&
-		utils.StringSlicesEqual(o.BPF, other.BPF))
+		StringSlicesEqual(o.BPF, other.BPF))
 }
 
 // Equals returns true if the role conditions (logins, namespaces, labels,
 // and rules) are equal and false if they are not.
 func (r *RoleConditions) Equals(o RoleConditions) bool {
-	if !utils.StringSlicesEqual(r.Logins, o.Logins) {
+	if !StringSlicesEqual(r.Logins, o.Logins) {
 		return false
 	}
-	if !utils.StringSlicesEqual(r.Namespaces, o.Namespaces) {
+	if !StringSlicesEqual(r.Namespaces, o.Namespaces) {
 		return false
 	}
 	if !r.NodeLabels.Equals(o.NodeLabels) {
@@ -427,22 +538,167 @@ func (r *RoleConditions) Equals(o RoleConditions) bool {
 	return true
 }
 
-// BoolOption is a wrapper around bool
-// that can take multiple values:
-// * true, false and non-set (when pointer is nil)
-// and can marshal itself to protobuf equivalent BoolValue
-type BoolOption struct {
-	// Value is a value of the option
-	Value bool
+// NewRule creates a rule based on a resource name and a list of verbs
+func NewRule(resource string, verbs []string) Rule {
+	return Rule{
+		Resources: []string{resource},
+		Verbs:     verbs,
+	}
 }
 
-// BoolDefaultTrue returns true if v is not set (pointer is nil)
-// otherwise returns real boolean value
-func BoolDefaultTrue(v *BoolOption) bool {
-	if v == nil {
-		return true
+// CheckAndSetDefaults checks and sets defaults for this rule
+func (r *Rule) CheckAndSetDefaults() error {
+	if len(r.Resources) == 0 {
+		return trace.BadParameter("missing resources to match")
 	}
-	return v.Value
+	if len(r.Verbs) == 0 {
+		return trace.BadParameter("missing verbs")
+	}
+	if len(r.Where) != 0 {
+		parser, err := GetWhereParserFn()(&Context{})
+		if err != nil {
+			return trace.Wrap(err)
+		}
+		_, err = parser.Parse(r.Where)
+		if err != nil {
+			return trace.BadParameter("could not parse 'where' rule: %q, error: %v", r.Where, err)
+		}
+	}
+	if len(r.Actions) != 0 {
+		parser, err := GetActionsParserFn()(&Context{})
+		if err != nil {
+			return trace.Wrap(err)
+		}
+		for i, action := range r.Actions {
+			_, err = parser.Parse(action)
+			if err != nil {
+				return trace.BadParameter("could not parse action %v %q, error: %v", i, action, err)
+			}
+		}
+	}
+	return nil
+}
+
+// score is a sorting score of the rule, the more the score, the more
+// specific the rule is
+func (r *Rule) score() int {
+	score := 0
+	// wilcard rules are less specific
+	if utils.SliceContainsStr(r.Resources, constants.Wildcard) {
+		score -= 4
+	} else if len(r.Resources) == 1 {
+		// rules that match specific resource are more specific than
+		// fields that match several resources
+		score += 2
+	}
+	// rules that have wilcard verbs are less specific
+	if utils.SliceContainsStr(r.Verbs, constants.Wildcard) {
+		score -= 2
+	}
+	// rules that supply 'where' or 'actions' are more specific
+	// having 'where' or 'actions' is more important than
+	// whether the rules are wildcard or not, so here we have +8 vs
+	// -4 and -2 score penalty for wildcards in resources and verbs
+	if len(r.Where) > 0 {
+		score += 8
+	}
+	// rules featuring actions are more specific
+	if len(r.Actions) > 0 {
+		score += 8
+	}
+	return score
+}
+
+// IsMoreSpecificThan returns true if the rule is more specific than the other.
+//
+// * nRule matching wildcard resource is less specific
+// than same rule matching specific resource.
+// * Rule that has wildcard verbs is less specific
+// than the same rules matching specific verb.
+// * Rule that has where section is more specific
+// than the same rule without where section.
+// * Rule that has actions list is more specific than
+// rule without actions list.
+func (r *Rule) IsMoreSpecificThan(o Rule) bool {
+	return r.score() > o.score()
+}
+
+// MatchesWhere returns true if Where rule matches
+// Empty Where block always matches
+func (r *Rule) MatchesWhere(parser predicate.Parser) (bool, error) {
+	if r.Where == "" {
+		return true, nil
+	}
+	ifn, err := parser.Parse(r.Where)
+	if err != nil {
+		return false, trace.Wrap(err)
+	}
+	fn, ok := ifn.(predicate.BoolPredicate)
+	if !ok {
+		return false, trace.BadParameter("unsupported type: %T", ifn)
+	}
+	return fn(), nil
+}
+
+// ProcessActions processes actions specified for this rule
+func (r *Rule) ProcessActions(parser predicate.Parser) error {
+	for _, action := range r.Actions {
+		ifn, err := parser.Parse(action)
+		if err != nil {
+			return trace.Wrap(err)
+		}
+		fn, ok := ifn.(predicate.BoolPredicate)
+		if !ok {
+			return trace.BadParameter("unsupported type: %T", ifn)
+		}
+		fn()
+	}
+	return nil
+}
+
+// HasResource returns true if the rule has the specified resource.
+func (r *Rule) HasResource(resource string) bool {
+	for _, r := range r.Resources {
+		if r == resource {
+			return true
+		}
+	}
+	return false
+}
+
+// HasVerb returns true if the rule has verb,
+// this method also matches wildcard
+func (r *Rule) HasVerb(verb string) bool {
+	for _, v := range r.Verbs {
+		// readnosecrets can be satisfied by having readnosecrets or read
+		if verb == constants.VerbReadNoSecrets {
+			if v == constants.VerbReadNoSecrets || v == constants.VerbRead {
+				return true
+			}
+			continue
+		}
+		if v == verb {
+			return true
+		}
+	}
+	return false
+}
+
+// Equals returns true if the rule equals to another
+func (r *Rule) Equals(other Rule) bool {
+	if !StringSlicesEqual(r.Resources, other.Resources) {
+		return false
+	}
+	if !StringSlicesEqual(r.Verbs, other.Verbs) {
+		return false
+	}
+	if !StringSlicesEqual(r.Actions, other.Actions) {
+		return false
+	}
+	if r.Where != other.Where {
+		return false
+	}
+	return true
 }
 
 // CopyRulesSlice copies input slice of Rules and returns the copy
@@ -470,6 +726,52 @@ func RuleSlicesEqual(a, b []Rule) bool {
 // from scalar and list values
 type Labels map[string]utils.Strings
 
+func (l Labels) protoType() *wrappers.LabelValues {
+	v := &wrappers.LabelValues{
+		Values: make(map[string]wrappers.StringValues, len(l)),
+	}
+	for key, vals := range l {
+		stringValues := wrappers.StringValues{
+			Values: make([]string, len(vals)),
+		}
+		copy(stringValues.Values, vals)
+		v.Values[key] = stringValues
+	}
+	return v
+}
+
+// Marshal marshals value into protobuf representation
+func (l Labels) Marshal() ([]byte, error) {
+	return proto.Marshal(l.protoType())
+}
+
+// MarshalTo marshals value to the array
+func (l Labels) MarshalTo(data []byte) (int, error) {
+	return l.protoType().MarshalTo(data)
+}
+
+// Unmarshal unmarshals value from protobuf
+func (l *Labels) Unmarshal(data []byte) error {
+	protoValues := &wrappers.LabelValues{}
+	err := proto.Unmarshal(data, protoValues)
+	if err != nil {
+		return err
+	}
+	if protoValues.Values == nil {
+		return nil
+	}
+	*l = make(map[string]utils.Strings, len(protoValues.Values))
+	for key := range protoValues.Values {
+		(*l)[key] = protoValues.Values[key].Values
+	}
+	return nil
+}
+
+// Size returns protobuf size
+func (l Labels) Size() int {
+	return l.protoType().Size()
+}
+
 // Clone returns non-shallow copy of the labels set
 func (l Labels) Clone() Labels {
 	if l == nil {
@@ -482,4 +784,103 @@ func (l Labels) Clone() Labels {
 		out[key] = cvals
 	}
 	return out
+}
+
+// Equals returns true if two label sets are equal
+func (l Labels) Equals(o Labels) bool {
+	if len(l) != len(o) {
+		return false
+	}
+	for key := range l {
+		if !StringSlicesEqual(l[key], o[key]) {
+			return false
+		}
+	}
+	return true
+}
+
+// BoolOption is a wrapper around bool
+// that can take multiple values:
+// * true, false and non-set (when pointer is nil)
+// and can marshal itself to protobuf equivalent BoolValue
+type BoolOption struct {
+	// Value is a value of the option
+	Value bool
+}
+
+// NewBoolOption returns Bool struct based on bool value
+func NewBoolOption(b bool) *BoolOption {
+	v := BoolOption{Value: b}
+	return &v
+}
+
+// BoolDefaultTrue returns true if v is not set (pointer is nil)
+// otherwise returns real boolean value
+func BoolDefaultTrue(v *BoolOption) bool {
+	if v == nil {
+		return true
+	}
+	return v.Value
+}
+
+func (b *BoolOption) protoType() *BoolValue {
+	return &BoolValue{
+		Value: b.Value,
+	}
+}
+
+// MarshalTo marshals value to the slice
+func (b BoolOption) MarshalTo(data []byte) (int, error) {
+	return b.protoType().MarshalTo(data)
+}
+
+// Marshal marshals value into protobuf representation
+func (b BoolOption) Marshal() ([]byte, error) {
+	return proto.Marshal(b.protoType())
+}
+
+// Unmarshal unmarshals value from protobuf
+func (b *BoolOption) Unmarshal(data []byte) error {
+	protoValue := &BoolValue{}
+	err := proto.Unmarshal(data, protoValue)
+	if err != nil {
+		return err
+	}
+	b.Value = protoValue.Value
+	return nil
+}
+
+// Size returns protobuf size
+func (b BoolOption) Size() int {
+	return b.protoType().Size()
+}
+
+// MarshalJSON marshals boolean value.
+func (b BoolOption) MarshalJSON() ([]byte, error) {
+	return json.Marshal(b.Value)
+}
+
+// UnmarshalJSON unmarshals JSON from string or bool,
+// in case if value is missing or not recognized, defaults to false
+func (b *BoolOption) UnmarshalJSON(data []byte) error {
+	var val Bool
+	if err := val.UnmarshalJSON(data); err != nil {
+		return err
+	}
+	b.Value = val.Value()
+	return nil
+}
+
+// MarshalYAML marshals bool into yaml value
+func (b *BoolOption) MarshalYAML() (interface{}, error) {
+	return b.Value, nil
+}
+
+func (b *BoolOption) UnmarshalYAML(unmarshal func(interface{}) error) error {
+	var val Bool
+	if err := val.UnmarshalYAML(unmarshal); err != nil {
+		return err
+	}
+	b.Value = val.Value()
+	return nil
 }

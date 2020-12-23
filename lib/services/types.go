@@ -40,12 +40,12 @@ type ResourceHeader struct{ types.ResourceHeader }
 type Metadata = types.Metadata
 
 type Role = types.Role
-type RoleV3 struct{ types.RoleV3 }
+type RoleV3 = types.RoleV3
 type RoleSpecV3 = types.RoleSpecV3
-type RoleConditions struct{ types.RoleConditions }
+type RoleConditions = types.RoleConditions
 type RoleConditionType = types.RoleConditionType
-type RoleOptions struct{ types.RoleOptions }
-type Rule struct{ types.Rule }
+type RoleOptions = types.RoleOptions
+type Rule = types.Rule
 type Labels = types.Labels
 
 type WebSessionV2 struct{ types.WebSessionV2 }
@@ -53,6 +53,9 @@ type WebSessionSpecV2 = types.WebSessionSpecV2
 
 // Some functions and variables also need to be imported from the types package
 var (
+	NewRule       = types.NewRule
+	NewBoolOption = types.NewBoolOption
+
 	MaxDuration           = types.MaxDuration
 	NewDuration           = types.NewDuration
 	IsValidLabelKey       = types.IsValidLabelKey
