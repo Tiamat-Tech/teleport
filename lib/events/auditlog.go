@@ -338,6 +338,13 @@ func (l *AuditLog) UploadSessionRecording(r SessionRecording) error {
 		return trace.Wrap(err)
 	}
 
+	// This function runs on the Auth Server. If no upload handler is defined
+	// (for example, not going to S3) then unarchive it to Auth Server disk.
+	if l.UploadHandler == nil {
+		err := utils.Extract(r.Recording, filepath.Join(l.DataDir, l.ServerID, SessionLogsDir, r.Namespace))
+		return trace.Wrap(err)
+	}
+
 	// Upload session recording to endpoint defined in file configuration. Like S3.
 	start := time.Now()
 	url, err := l.UploadHandler.Upload(context.TODO(), r.SessionID, r.Recording)
@@ -346,11 +353,18 @@ func (l *AuditLog) UploadSessionRecording(r SessionRecording) error {
 		return trace.Wrap(err)
 	}
 	l.log.WithFields(log.Fields{"duration": time.Since(start), "session-id": r.SessionID}).Debugf("Session upload completed.")
-	return l.EmitAuditEventLegacy(SessionUploadE, EventFields{
-		SessionEventID: string(r.SessionID),
-		URL:            url,
-		EventIndex:     SessionUploadIndex,
-	})
+	return l.EmitAuditEvent(l.ctx, &SessionUpload {
+		Metadata: Metadata{
+			Type: EventType, 
+			Code: EventCode, 
+		},
+		SessionMetadata: SessionMetadata{
+			SessionID: string(r.SessionID),
+		}, 
+		SessionUploadTime: start,
+		SessionURL: url,
+		UID: EventID,
+	});
 }
 
 // PostSessionSlice submits slice of session chunks to the audit log server.
