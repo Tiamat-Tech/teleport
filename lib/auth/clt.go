@@ -72,14 +72,16 @@ type APIClient = client.Client
 // tunnel first, and then do HTTP-over-SSH. This client is wrapped by auth.TunClient
 // in lib/auth/tun.go
 type Client struct {
-	sync.Mutex
-	// Deprecated, will be gradually phased out in favor of grpc.
-	roundtrip.Client
-	// Deprecated, will be gradually phased out in favor of grpc.
-	transport *http.Transport
 	// APIClient is embedded so that Client can inherit its grpc endpoint
-	// methods to satisfy the ClientI interface.
+	// methods to satisfy the ClientI interface. Client uses APIClient.Config
+	// for its own config, except TLS config is kept separate.
 	APIClient
+	// http client is deprecated and will be gradually phased out in favor of APIClient (gRPC).
+	sync.Mutex
+	roundtrip.Client
+	transport *http.Transport
+	// TLS holds the TLS config for the http client.
+	TLS *tls.Config
 }
 
 // Make sure Client implements all the necessary methods.
@@ -88,9 +90,16 @@ var _ ClientI = &Client{}
 // NewClient returns a new client that uses mutual TLS authentication
 // and dials the remote server using dialer.
 func NewClient(cfg client.Config, params ...roundtrip.ClientParam) (*Client, error) {
+	// Copy cfg.TLS.NextProtos for http TLS, before CheckAndSetDefaults overwrites it for http2.
+	httpNextProtos := cfg.TLS.NextProtos
+
 	if err := cfg.CheckAndSetDefaults(); err != nil {
 		return nil, trace.Wrap(err)
 	}
+
+	// Client's tlsConfig must be kept separate from http2 tls config.
+	tlsConfig := cfg.TLS.Clone()
+	tlsConfig.NextProtos = httpNextProtos
 
 	transport := &http.Transport{
 		// notice that below roundtrip.Client is passed
@@ -100,7 +109,7 @@ func NewClient(cfg client.Config, params ...roundtrip.ClientParam) (*Client, err
 		// in addition this dialer tries multiple adresses if provided
 		DialContext:           cfg.Dialer.DialContext,
 		ResponseHeaderTimeout: defaults.DefaultDialTimeout,
-		TLSClientConfig:       cfg.TLS,
+		TLSClientConfig:       tlsConfig,
 
 		// Increase the size of the connection pool. This substantially improves the
 		// performance of Teleport under load as it reduces the number of TLS
@@ -134,12 +143,7 @@ func NewClient(cfg client.Config, params ...roundtrip.ClientParam) (*Client, err
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
-	apiClient, err := client.NewClient(client.Config{
-		Dialer:          cfg.Dialer,
-		KeepAlivePeriod: cfg.KeepAlivePeriod,
-		KeepAliveCount:  cfg.KeepAliveCount,
-		TLS:             cfg.TLS,
-	})
+	apiClient, err := client.NewClient(cfg)
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
@@ -147,6 +151,7 @@ func NewClient(cfg client.Config, params ...roundtrip.ClientParam) (*Client, err
 		APIClient: *apiClient,
 		Client:    *roundtripClient,
 		transport: transport,
+		TLS:       tlsConfig,
 	}, nil
 }
 
@@ -223,6 +228,11 @@ func NewTLSClient(cfg ClientConfig, params ...roundtrip.ClientParam) (*Client, e
 	}
 
 	return NewClient(c, params...)
+}
+
+// TLSConfig returns the client's http TLS config
+func (c *Client) TLSConfig() *tls.Config {
+	return c.TLS
 }
 
 func (c *Client) GetTransport() *http.Transport {

@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package api holds the implementation of the gRPC auth client
+// Package client holds the implementation of the Teleport gRPC api client
 package client
 
 import (
@@ -36,7 +36,6 @@ import (
 	"github.com/golang/protobuf/ptypes/empty"
 	"github.com/gravitational/trace"
 	"github.com/gravitational/trace/trail"
-	"golang.org/x/net/http2"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	ggzip "google.golang.org/grpc/encoding/gzip"
@@ -120,9 +119,6 @@ func (c *Config) CheckAndSetDefaults() error {
 	if len(c.Addrs) == 0 && c.Dialer == nil {
 		return trace.BadParameter("set parameter Addrs or Dialer")
 	}
-	if len(c.Addrs) != 0 && c.Dialer != nil {
-		return trace.BadParameter("set parameter Addrs or Dialer, not both")
-	}
 	if c.TLS == nil {
 		return trace.BadParameter("missing parameter TLS")
 	}
@@ -141,7 +137,6 @@ func (c *Config) CheckAndSetDefaults() error {
 			return trace.Wrap(err)
 		}
 	}
-	c.TLS.NextProtos = []string{http2.NextProtoTLS}
 	if c.TLS.ServerName == "" {
 		c.TLS.ServerName = teleport.APIDomain
 	}
@@ -158,11 +153,6 @@ func (c *Config) CheckAndSetDefaults() error {
 	}
 
 	return nil
-}
-
-// TLSConfig returns the TLS config used by the client.
-func (c *Client) TLSConfig() *tls.Config {
-	return c.c.TLS
 }
 
 // Dialer returns the client's connection dialer
