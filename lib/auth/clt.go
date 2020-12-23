@@ -32,8 +32,8 @@ import (
 	"time"
 
 	"github.com/gravitational/teleport"
-	"github.com/gravitational/teleport/api"
-	"github.com/gravitational/teleport/api/proto"
+	"github.com/gravitational/teleport/api/client"
+	"github.com/gravitational/teleport/api/client/proto"
 	"github.com/gravitational/teleport/lib/backend"
 	"github.com/gravitational/teleport/lib/defaults"
 	"github.com/gravitational/teleport/lib/events"
@@ -57,13 +57,13 @@ const (
 )
 
 // ContextDialer type alias for backwards compatibility
-type ContextDialer = api.ContextDialer
+type ContextDialer = client.ContextDialer
 
 // ContextDialerFunc type alias for backwards compatibility
-type ContextDialerFunc = api.ContextDialerFunc
+type ContextDialerFunc = client.ContextDialerFunc
 
 // APIClient is aliased here so that it can be embedded in Client
-type APIClient = api.Client
+type APIClient = client.Client
 
 // Client is the Auth API client. It works by connecting to auth servers
 // via gRPC and HTTP.
@@ -72,14 +72,16 @@ type APIClient = api.Client
 // tunnel first, and then do HTTP-over-SSH. This client is wrapped by auth.TunClient
 // in lib/auth/tun.go
 type Client struct {
-	sync.Mutex
-	// Deprecated, will be gradually phased out in favor of grpc.
-	roundtrip.Client
-	// Deprecated, will be gradually phased out in favor of grpc.
-	transport *http.Transport
 	// APIClient is embedded so that Client can inherit its grpc endpoint
-	// methods to satisfy the ClientI interface.
+	// methods to satisfy the ClientI interface. Client uses APIClient.Config
+	// for its own config, except TLS config is kept separate.
 	APIClient
+	// http client is deprecated and will be gradually phased out in favor of APIClient (gRPC).
+	sync.Mutex
+	roundtrip.Client
+	transport *http.Transport
+	// TLS holds the TLS config for the http client.
+	TLS *tls.Config
 }
 
 // Make sure Client implements all the necessary methods.
@@ -87,21 +89,17 @@ var _ ClientI = &Client{}
 
 // NewClient returns a new client that uses mutual TLS authentication
 // and dials the remote server using dialer.
-func NewClient(cfg api.Config, params ...roundtrip.ClientParam) (*Client, error) {
+func NewClient(cfg client.Config, params ...roundtrip.ClientParam) (*Client, error) {
+	// Copy cfg.TLS.NextProtos for http TLS, before CheckAndSetDefaults overwrites it for http2.
+	httpNextProtos := cfg.TLS.NextProtos
+
 	if err := cfg.CheckAndSetDefaults(); err != nil {
 		return nil, trace.Wrap(err)
 	}
 
-	// this logic is necessary to force client to always send certificate
-	// regardless of the server setting, otherwise client may pick
-	// not to send the client certificate by looking at certificate request
-	if len(cfg.TLS.Certificates) != 0 {
-		cert := cfg.TLS.Certificates[0]
-		cfg.TLS.Certificates = nil
-		cfg.TLS.GetClientCertificate = func(_ *tls.CertificateRequestInfo) (*tls.Certificate, error) {
-			return &cert, nil
-		}
-	}
+	// Client's tlsConfig must be kept separate from http2 tls config.
+	tlsConfig := cfg.TLS.Clone()
+	tlsConfig.NextProtos = httpNextProtos
 
 	transport := &http.Transport{
 		// notice that below roundtrip.Client is passed
@@ -111,7 +109,7 @@ func NewClient(cfg api.Config, params ...roundtrip.ClientParam) (*Client, error)
 		// in addition this dialer tries multiple adresses if provided
 		DialContext:           cfg.Dialer.DialContext,
 		ResponseHeaderTimeout: defaults.DefaultDialTimeout,
-		TLSClientConfig:       cfg.TLS,
+		TLSClientConfig:       tlsConfig,
 
 		// Increase the size of the connection pool. This substantially improves the
 		// performance of Teleport under load as it reduces the number of TLS
@@ -145,12 +143,7 @@ func NewClient(cfg api.Config, params ...roundtrip.ClientParam) (*Client, error)
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
-	apiClient, err := api.NewClient(api.Config{
-		Dialer:          cfg.Dialer,
-		KeepAlivePeriod: cfg.KeepAlivePeriod,
-		KeepAliveCount:  cfg.KeepAliveCount,
-		TLS:             cfg.TLS,
-	})
+	apiClient, err := client.NewClient(cfg)
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
@@ -158,6 +151,7 @@ func NewClient(cfg api.Config, params ...roundtrip.ClientParam) (*Client, error)
 		APIClient: *apiClient,
 		Client:    *roundtripClient,
 		transport: transport,
+		TLS:       tlsConfig,
 	}, nil
 }
 
@@ -203,7 +197,7 @@ func ClientTimeout(timeout time.Duration) roundtrip.ClientParam {
 }
 
 // ClientConfig contains configuration of the client
-// Deprecated, remove in 7.0
+// DELETE IN: 7.0.0.
 type ClientConfig struct {
 	// Addrs is a list of addresses to dial
 	Addrs []utils.NetAddr
@@ -222,9 +216,9 @@ type ClientConfig struct {
 
 // NewTLSClient returns a new TLS client that uses mutual TLS authentication
 // and dials the remote server using dialer.
-// Deprecated, use NewClient instead, remove in 7.0.
+// DELETE IN: 7.0.0.
 func NewTLSClient(cfg ClientConfig, params ...roundtrip.ClientParam) (*Client, error) {
-	c := api.Config{
+	c := client.Config{
 		Addrs:           utils.NetAddrsToStrings(cfg.Addrs),
 		Dialer:          cfg.Dialer,
 		DialTimeout:     cfg.DialTimeout,
@@ -234,6 +228,11 @@ func NewTLSClient(cfg ClientConfig, params ...roundtrip.ClientParam) (*Client, e
 	}
 
 	return NewClient(c, params...)
+}
+
+// TLSConfig returns the client's http TLS config
+func (c *Client) TLSConfig() *tls.Config {
+	return c.TLS
 }
 
 func (c *Client) GetTransport() *http.Transport {

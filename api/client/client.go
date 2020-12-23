@@ -14,8 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package api holds the implementation of the gRPC auth client
-package api
+// Package client holds the implementation of the Teleport gRPC api client
+package client
 
 import (
 	"compress/gzip"
@@ -27,8 +27,8 @@ import (
 	"time"
 
 	"github.com/gravitational/teleport"
+	"github.com/gravitational/teleport/api/client/proto"
 	"github.com/gravitational/teleport/api/constants"
-	"github.com/gravitational/teleport/api/proto"
 	"github.com/gravitational/teleport/api/types"
 	"github.com/gravitational/teleport/lib/events"
 	"github.com/gravitational/teleport/lib/jwt"
@@ -36,7 +36,6 @@ import (
 	"github.com/golang/protobuf/ptypes/empty"
 	"github.com/gravitational/trace"
 	"github.com/gravitational/trace/trail"
-	"golang.org/x/net/http2"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	ggzip "google.golang.org/grpc/encoding/gzip"
@@ -81,13 +80,10 @@ func NewClient(cfg Config) (*Client, error) {
 		return conn, nil
 	})
 
-	tlsConfig := c.c.TLS.Clone()
-	tlsConfig.NextProtos = []string{http2.NextProtoTLS}
-
 	var err error
 	if c.conn, err = grpc.Dial(teleport.APIDomain,
 		dialer,
-		grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig)),
+		grpc.WithTransportCredentials(credentials.NewTLS(c.c.TLS)),
 		grpc.WithKeepaliveParams(keepalive.ClientParameters{
 			Time:                c.c.KeepAlivePeriod,
 			Timeout:             c.c.KeepAlivePeriod * time.Duration(c.c.KeepAliveCount),
@@ -123,9 +119,6 @@ func (c *Config) CheckAndSetDefaults() error {
 	if len(c.Addrs) == 0 && c.Dialer == nil {
 		return trace.BadParameter("set parameter Addrs or Dialer")
 	}
-	if len(c.Addrs) != 0 && c.Dialer != nil {
-		return trace.BadParameter("set parameter Addrs or Dialer, not both")
-	}
 	if c.TLS == nil {
 		return trace.BadParameter("missing parameter TLS")
 	}
@@ -148,12 +141,18 @@ func (c *Config) CheckAndSetDefaults() error {
 		c.TLS.ServerName = teleport.APIDomain
 	}
 
-	return nil
-}
+	// this logic is necessary to force client to always send certificate
+	// regardless of the server setting, otherwise client may pick
+	// not to send the client certificate by looking at certificate request.
+	if len(c.TLS.Certificates) != 0 {
+		cert := c.TLS.Certificates[0]
+		c.TLS.Certificates = nil
+		c.TLS.GetClientCertificate = func(_ *tls.CertificateRequestInfo) (*tls.Certificate, error) {
+			return &cert, nil
+		}
+	}
 
-// TLSConfig returns the TLS config used by the client.
-func (c *Client) TLSConfig() *tls.Config {
-	return c.c.TLS
+	return nil
 }
 
 // Dialer returns the client's connection dialer
@@ -178,7 +177,8 @@ func (c *Client) isClosed() bool {
 	return atomic.LoadInt32(&c.closedFlag) == 1
 }
 
-// setClosed sets closedFlag to 1 and return whether it was changed.
+// setClosed marks the client to closed and returns true
+// if the client was successfully marked as closed.
 func (c *Client) setClosed() bool {
 	return atomic.CompareAndSwapInt32(&c.closedFlag, 0, 1)
 }
@@ -341,9 +341,9 @@ func (c *Client) RotateResetPasswordTokenSecrets(ctx context.Context, tokenID st
 	return secrets, nil
 }
 
-// GetResetPasswordTokens returns all ResetPasswordTokens.
+// GetResetPasswordToken returns a ResetPasswordToken for the specified tokenID.
 func (c *Client) GetResetPasswordToken(ctx context.Context, tokenID string) (types.ResetPasswordToken, error) {
-	token, err := c.grpc.GetResetPasswordToken(ctx, &GetResetPasswordTokenRequest{
+	token, err := c.grpc.GetResetPasswordToken(ctx, &proto.GetResetPasswordTokenRequest{
 		TokenID: tokenID,
 	})
 	if err != nil {

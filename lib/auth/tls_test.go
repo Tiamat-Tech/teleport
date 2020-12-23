@@ -35,8 +35,8 @@ import (
 	"golang.org/x/crypto/ssh"
 
 	"github.com/gravitational/teleport"
-	"github.com/gravitational/teleport/api"
-	"github.com/gravitational/teleport/api/proto"
+	"github.com/gravitational/teleport/api/client"
+	"github.com/gravitational/teleport/api/client/proto"
 	"github.com/gravitational/teleport/lib/backend"
 	"github.com/gravitational/teleport/lib/defaults"
 	"github.com/gravitational/teleport/lib/events"
@@ -2382,7 +2382,7 @@ func (s *TLSSuite) TestCipherSuites(c *check.C) {
 		otherServer.Addr().String(),
 		s.server.Addr().String(),
 	}
-	client, err := NewClient(api.Config{
+	client, err := NewClient(client.Config{
 		Addrs: addrs,
 		TLS:   tlsConfig,
 	})
@@ -2406,7 +2406,7 @@ func (s *TLSSuite) TestTLSFailover(c *check.C) {
 		otherServer.Addr().String(),
 		s.server.Addr().String(),
 	}
-	client, err := NewClient(api.Config{Addrs: addrs, TLS: tlsConfig})
+	client, err := NewClient(client.Config{Addrs: addrs, TLS: tlsConfig})
 	c.Assert(err, check.IsNil)
 
 	// couple of runs to get enough connections
