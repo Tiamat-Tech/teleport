@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package api
+package client
 
 import (
 	"context"
@@ -26,7 +26,7 @@ import (
 
 // ContextDialer represents network dialer interface that uses context
 type ContextDialer interface {
-	// DialContext is a function that dials to the specified address
+	// DialContext is a function that dials the specified address
 	DialContext(ctx context.Context, network, addr string) (net.Conn, error)
 }
 

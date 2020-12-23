@@ -7,7 +7,7 @@ import (
 	"io/ioutil"
 	"os"
 
-	"github.com/gravitational/teleport/api"
+	"github.com/gravitational/teleport/api/client"
 	"github.com/gravitational/teleport/lib/auth"
 )
 
@@ -19,7 +19,7 @@ func connectClient() (*auth.Client, error) {
 	}
 
 	// replace 127.0.0.1:3025 (default) with your auth server address
-	config := api.Config{Addrs: []string{"127.0.0.1:3025"}, TLS: tlsConfig}
+	config := client.Config{Addrs: []string{"127.0.0.1:3025"}, TLS: tlsConfig}
 	return auth.NewClient(config)
 }
 

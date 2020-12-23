@@ -14,13 +14,13 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package api
+package client
 
 import (
 	"context"
 	"sync"
 
-	"github.com/gravitational/teleport/api/proto"
+	"github.com/gravitational/teleport/api/client/proto"
 	"github.com/gravitational/teleport/lib/services"
 
 	"github.com/golang/protobuf/ptypes/empty"
@@ -28,7 +28,8 @@ import (
 )
 
 // NewKeepAliver returns a new instance of keep aliver.
-// Run k.Close to release the keepAliver and its goroutines
+// It is the caller's responsibility to invoke Close on the
+// returned value to release the keepAliver resources.
 func (c *Client) NewKeepAliver(ctx context.Context) (services.KeepAliver, error) {
 	cancelCtx, cancel := context.WithCancel(ctx)
 	stream, err := c.grpc.SendKeepAlives(cancelCtx)

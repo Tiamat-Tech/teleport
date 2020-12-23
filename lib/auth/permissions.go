@@ -22,7 +22,7 @@ import (
 	"strings"
 
 	"github.com/gravitational/teleport"
-	"github.com/gravitational/teleport/api"
+	"github.com/gravitational/teleport/api/client"
 	"github.com/gravitational/teleport/lib/services"
 	"github.com/gravitational/teleport/lib/tlsca"
 
@@ -528,7 +528,7 @@ const (
 )
 
 // WithDelegator alias for backwards compatibility
-var WithDelegator = api.WithDelegator
+var WithDelegator = client.WithDelegator
 
 // clientUsername returns the username of a remote HTTP client making the call.
 // If ctx didn't pass through auth middleware or did not come from an HTTP

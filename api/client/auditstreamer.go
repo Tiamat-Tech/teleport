@@ -14,13 +14,13 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package api
+package client
 
 import (
 	"context"
 	"sync"
 
-	"github.com/gravitational/teleport/api/proto"
+	"github.com/gravitational/teleport/api/client/proto"
 	"github.com/gravitational/teleport/lib/events"
 	"github.com/gravitational/teleport/lib/session"
 
@@ -123,7 +123,6 @@ func (s *auditStreamer) EmitAuditEvent(ctx context.Context, event events.AuditEv
 }
 
 // Done returns channel closed when streamer is closed.
-// Should be used to detect sending errors.
 func (s *auditStreamer) Done() <-chan struct{} {
 	return s.closeCtx.Done()
 }

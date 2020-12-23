@@ -32,8 +32,8 @@ import (
 	"time"
 
 	"github.com/gravitational/teleport"
-	"github.com/gravitational/teleport/api"
-	"github.com/gravitational/teleport/api/proto"
+	"github.com/gravitational/teleport/api/client"
+	"github.com/gravitational/teleport/api/client/proto"
 	"github.com/gravitational/teleport/lib/backend"
 	"github.com/gravitational/teleport/lib/defaults"
 	"github.com/gravitational/teleport/lib/events"
@@ -57,13 +57,13 @@ const (
 )
 
 // ContextDialer type alias for backwards compatibility
-type ContextDialer = api.ContextDialer
+type ContextDialer = client.ContextDialer
 
 // ContextDialerFunc type alias for backwards compatibility
-type ContextDialerFunc = api.ContextDialerFunc
+type ContextDialerFunc = client.ContextDialerFunc
 
 // APIClient is aliased here so that it can be embedded in Client
-type APIClient = api.Client
+type APIClient = client.Client
 
 // Client is the Auth API client. It works by connecting to auth servers
 // via gRPC and HTTP.
@@ -87,20 +87,9 @@ var _ ClientI = &Client{}
 
 // NewClient returns a new client that uses mutual TLS authentication
 // and dials the remote server using dialer.
-func NewClient(cfg api.Config, params ...roundtrip.ClientParam) (*Client, error) {
+func NewClient(cfg client.Config, params ...roundtrip.ClientParam) (*Client, error) {
 	if err := cfg.CheckAndSetDefaults(); err != nil {
 		return nil, trace.Wrap(err)
-	}
-
-	// this logic is necessary to force client to always send certificate
-	// regardless of the server setting, otherwise client may pick
-	// not to send the client certificate by looking at certificate request
-	if len(cfg.TLS.Certificates) != 0 {
-		cert := cfg.TLS.Certificates[0]
-		cfg.TLS.Certificates = nil
-		cfg.TLS.GetClientCertificate = func(_ *tls.CertificateRequestInfo) (*tls.Certificate, error) {
-			return &cert, nil
-		}
 	}
 
 	transport := &http.Transport{
@@ -145,7 +134,7 @@ func NewClient(cfg api.Config, params ...roundtrip.ClientParam) (*Client, error)
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
-	apiClient, err := api.NewClient(api.Config{
+	apiClient, err := client.NewClient(client.Config{
 		Dialer:          cfg.Dialer,
 		KeepAlivePeriod: cfg.KeepAlivePeriod,
 		KeepAliveCount:  cfg.KeepAliveCount,
@@ -203,7 +192,7 @@ func ClientTimeout(timeout time.Duration) roundtrip.ClientParam {
 }
 
 // ClientConfig contains configuration of the client
-// Deprecated, remove in 7.0
+// DELETE IN: 7.0.0.
 type ClientConfig struct {
 	// Addrs is a list of addresses to dial
 	Addrs []utils.NetAddr
@@ -222,9 +211,9 @@ type ClientConfig struct {
 
 // NewTLSClient returns a new TLS client that uses mutual TLS authentication
 // and dials the remote server using dialer.
-// Deprecated, use NewClient instead, remove in 7.0.
+// DELETE IN: 7.0.0.
 func NewTLSClient(cfg ClientConfig, params ...roundtrip.ClientParam) (*Client, error) {
-	c := api.Config{
+	c := client.Config{
 		Addrs:           utils.NetAddrsToStrings(cfg.Addrs),
 		Dialer:          cfg.Dialer,
 		DialTimeout:     cfg.DialTimeout,

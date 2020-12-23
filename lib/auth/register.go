@@ -21,7 +21,7 @@ import (
 	"crypto/x509"
 
 	"github.com/gravitational/teleport"
-	"github.com/gravitational/teleport/api"
+	"github.com/gravitational/teleport/api/client"
 	"github.com/gravitational/teleport/lib"
 	"github.com/gravitational/teleport/lib/defaults"
 	"github.com/gravitational/teleport/lib/services"
@@ -235,7 +235,7 @@ func insecureRegisterClient(params RegisterParams) (*Client, error) {
 		log.Infof("Joining remote cluster %v, validating connection with certificate on disk.", cert.Subject.CommonName)
 	}
 
-	client, err := NewClient(api.Config{Addrs: utils.NetAddrsToStrings(params.Servers), TLS: tlsConfig})
+	client, err := NewClient(client.Config{Addrs: utils.NetAddrsToStrings(params.Servers), TLS: tlsConfig})
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
@@ -267,7 +267,7 @@ func pinRegisterClient(params RegisterParams) (*Client, error) {
 	// an attacker were to MITM this connection the CA pin will not match below.
 	tlsConfig := utils.TLSConfig(params.CipherSuites)
 	tlsConfig.InsecureSkipVerify = true
-	client, err := NewClient(api.Config{Addrs: utils.NetAddrsToStrings(params.Servers), TLS: tlsConfig})
+	client, err := NewClient(client.Config{Addrs: utils.NetAddrsToStrings(params.Servers), TLS: tlsConfig})
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
@@ -301,7 +301,7 @@ func pinRegisterClient(params RegisterParams) (*Client, error) {
 	certPool.AddCert(tlsCA)
 	tlsConfig.RootCAs = certPool
 
-	client, err = NewClient(api.Config{Addrs: utils.NetAddrsToStrings(params.Servers), TLS: tlsConfig})
+	client, err = NewClient(client.Config{Addrs: utils.NetAddrsToStrings(params.Servers), TLS: tlsConfig})
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}

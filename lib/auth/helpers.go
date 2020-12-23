@@ -26,7 +26,7 @@ import (
 	"time"
 
 	"github.com/gravitational/teleport"
-	"github.com/gravitational/teleport/api"
+	"github.com/gravitational/teleport/api/client"
 	authority "github.com/gravitational/teleport/lib/auth/testauthority"
 	"github.com/gravitational/teleport/lib/backend"
 	"github.com/gravitational/teleport/lib/backend/memory"
@@ -382,7 +382,7 @@ func (a *TestAuthServer) NewRemoteClient(identity TestIdentity, addr net.Addr, p
 	tlsConfig.RootCAs = pool
 	tlsConfig.ServerName = EncodeClusterName(a.ClusterName)
 	addrs := []string{addr.String()}
-	return NewClient(api.Config{Addrs: addrs, TLS: tlsConfig})
+	return NewClient(client.Config{Addrs: addrs, TLS: tlsConfig})
 }
 
 // TestTLSServerConfig is a configuration for test TLS server
@@ -550,7 +550,7 @@ func (t *TestTLSServer) NewClientFromWebSession(sess services.WebSession) (*Clie
 	}
 	tlsConfig.Certificates = []tls.Certificate{tlsCert}
 	addrs := []string{t.Addr().String()}
-	return NewClient(api.Config{Addrs: addrs, TLS: tlsConfig})
+	return NewClient(client.Config{Addrs: addrs, TLS: tlsConfig})
 }
 
 // CertPool returns cert pool that auth server represents
@@ -586,7 +586,7 @@ func (t *TestTLSServer) ClientTLSConfig(identity TestIdentity) (*tls.Config, err
 // but forces the client to be recreated
 func (t *TestTLSServer) CloneClient(clt *Client) *Client {
 	addr := []string{t.Addr().String()}
-	newClient, err := NewClient(api.Config{Addrs: addr, TLS: clt.TLSConfig()})
+	newClient, err := NewClient(client.Config{Addrs: addr, TLS: clt.TLSConfig()})
 	if err != nil {
 		panic(err)
 	}
@@ -600,7 +600,7 @@ func (t *TestTLSServer) NewClient(identity TestIdentity) (*Client, error) {
 		return nil, trace.Wrap(err)
 	}
 	addrs := []string{t.Addr().String()}
-	return NewClient(api.Config{Addrs: addrs, TLS: tlsConfig})
+	return NewClient(client.Config{Addrs: addrs, TLS: tlsConfig})
 }
 
 // Addr returns address of TLS server
