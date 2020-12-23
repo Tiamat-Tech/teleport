@@ -21,8 +21,7 @@ import (
 	"regexp"
 	"time"
 
-	"github.com/gravitational/teleport/lib/defaults"
-	"github.com/gravitational/teleport/lib/utils"
+	"github.com/gravitational/teleport/api/constants"
 
 	"github.com/gravitational/trace"
 	"github.com/jonboulle/clockwork"
@@ -166,12 +165,12 @@ func (m *Metadata) CheckAndSetDefaults() error {
 		return trace.BadParameter("missing parameter Name")
 	}
 	if m.Namespace == "" {
-		m.Namespace = defaults.Namespace
+		m.Namespace = constants.Namespace
 	}
 
 	// adjust expires time to utc if it's set
 	if m.Expires != nil {
-		utils.UTC(m.Expires)
+		UTC(m.Expires)
 	}
 
 	for key := range m.Labels {

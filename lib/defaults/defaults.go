@@ -24,7 +24,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/gravitational/teleport"
+	"github.com/gravitational/teleport/api/constants"
 	"github.com/gravitational/teleport/lib/limiter"
 	"github.com/gravitational/teleport/lib/utils"
 	"github.com/gravitational/trace"
@@ -90,7 +90,7 @@ const (
 
 	// DefaultDialTimeout is a default TCP dial timeout we set for our
 	// connection attempts
-	DefaultDialTimeout = 30 * time.Second
+	DefaultDialTimeout = constants.DefaultDialTimeout
 
 	// HTTPMaxIdleConns is the max idle connections across all hosts.
 	HTTPMaxIdleConns = 2000
@@ -212,7 +212,7 @@ const (
 	AccountLockInterval = 20 * time.Minute
 
 	// Namespace is default namespace
-	Namespace = "default"
+	Namespace = constants.Namespace
 
 	// AttemptTTL is TTL for login attempt
 	AttemptTTL = time.Minute * 30
@@ -283,7 +283,7 @@ var (
 
 	// ServerKeepAliveTTL is a period between server keep alives,
 	// when servers announce only presence withough sending full data
-	ServerKeepAliveTTL = 60 * time.Second
+	ServerKeepAliveTTL = constants.ServerKeepAliveTTL
 
 	// AuthServersRefreshPeriod is a period for clients to refresh their
 	// their stored list of auth servers
@@ -345,7 +345,7 @@ var (
 	// KeepAliveCountMax is the number of keep-alive messages that can be sent
 	// without receiving a response from the client before the client is
 	// disconnected. The max count mirrors ClientAliveCountMax of sshd.
-	KeepAliveCountMax = 3
+	KeepAliveCountMax = constants.KeepAliveCountMax
 
 	// DiskAlertThreshold is the disk space alerting threshold.
 	DiskAlertThreshold = 90
@@ -422,7 +422,7 @@ const (
 	// MinCertDuration specifies minimum duration of validity of issued cert
 	MinCertDuration = time.Minute
 	// MaxCertDuration limits maximum duration of validity of issued cert
-	MaxCertDuration = 30 * time.Hour
+	MaxCertDuration = constants.MaxCertDuration
 	// CertDuration is a default certificate duration
 	// 12 is default as it' longer than average working day (I hope so)
 	CertDuration = 12 * time.Hour
@@ -469,12 +469,7 @@ const (
 )
 
 // EnhancedEvents returns the default list of enhanced events.
-func EnhancedEvents() []string {
-	return []string{
-		teleport.EnhancedRecordingCommand,
-		teleport.EnhancedRecordingNetwork,
-	}
-}
+var EnhancedEvents = constants.EnhancedEvents()
 
 var (
 	// ConfigFilePath is default path to teleport config file

@@ -16,14 +16,12 @@ limitations under the License.
 
 package types
 
-import "github.com/gravitational/teleport/lib/utils"
-
 // Equals checks if the two role mappings are equal.
 func (r RoleMapping) Equals(o RoleMapping) bool {
 	if r.Remote != o.Remote {
 		return false
 	}
-	if !utils.StringSlicesEqual(r.Local, r.Local) {
+	if !StringSlicesEqual(r.Local, r.Local) {
 		return false
 	}
 	return true

@@ -24,7 +24,6 @@ import (
 
 	"github.com/gravitational/teleport"
 	"github.com/gravitational/teleport/api/constants"
-	"github.com/gravitational/teleport/lib/defaults"
 	"github.com/gravitational/teleport/lib/utils"
 	"github.com/gravitational/teleport/lib/utils/parse"
 	"github.com/gravitational/teleport/lib/wrappers"
@@ -413,16 +412,16 @@ func (r *RoleV3) CheckAndSetDefaults() error {
 		r.Spec.Options.CertificateFormat = teleport.CertificateFormatStandard
 	}
 	if r.Spec.Options.MaxSessionTTL.Value() == 0 {
-		r.Spec.Options.MaxSessionTTL = NewDuration(defaults.MaxCertDuration)
+		r.Spec.Options.MaxSessionTTL = NewDuration(constants.MaxCertDuration)
 	}
 	if r.Spec.Options.PortForwarding == nil {
 		r.Spec.Options.PortForwarding = NewBoolOption(true)
 	}
 	if len(r.Spec.Options.BPF) == 0 {
-		r.Spec.Options.BPF = defaults.EnhancedEvents()
+		r.Spec.Options.BPF = constants.EnhancedEvents()
 	}
 	if r.Spec.Allow.Namespaces == nil {
-		r.Spec.Allow.Namespaces = []string{defaults.Namespace}
+		r.Spec.Allow.Namespaces = []string{constants.Namespace}
 	}
 	if r.Spec.Allow.NodeLabels == nil {
 		if len(r.Spec.Allow.Logins) == 0 {
@@ -442,7 +441,7 @@ func (r *RoleV3) CheckAndSetDefaults() error {
 	}
 
 	if r.Spec.Deny.Namespaces == nil {
-		r.Spec.Deny.Namespaces = []string{defaults.Namespace}
+		r.Spec.Deny.Namespaces = []string{constants.Namespace}
 	}
 
 	// Validate that enhanced recording options are all valid.
@@ -469,7 +468,7 @@ func (r *RoleV3) CheckAndSetDefaults() error {
 
 	// check and correct the session ttl
 	if r.Spec.Options.MaxSessionTTL.Value() <= 0 {
-		r.Spec.Options.MaxSessionTTL = NewDuration(defaults.MaxCertDuration)
+		r.Spec.Options.MaxSessionTTL = NewDuration(constants.MaxCertDuration)
 	}
 
 	// restrict wildcards

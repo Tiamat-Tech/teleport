@@ -17,14 +17,10 @@ limitations under the License.
 package services
 
 import (
-	"fmt"
-	"time"
-
 	"github.com/gravitational/teleport/lib/defaults"
 	"github.com/gravitational/teleport/lib/utils"
 
 	"github.com/gravitational/trace"
-	"github.com/jonboulle/clockwork"
 )
 
 // StaticTokens define a list of static []ProvisionToken used to provision a
@@ -75,133 +71,6 @@ func DefaultStaticTokens() StaticTokens {
 			StaticTokens: []ProvisionTokenV1{},
 		},
 	}
-}
-
-// GetVersion returns resource version
-func (c *StaticTokensV2) GetVersion() string {
-	return c.Version
-}
-
-// GetKind returns resource kind
-func (c *StaticTokensV2) GetKind() string {
-	return c.Kind
-}
-
-// GetSubKind returns resource sub kind
-func (c *StaticTokensV2) GetSubKind() string {
-	return c.SubKind
-}
-
-// SetSubKind sets resource subkind
-func (c *StaticTokensV2) SetSubKind(sk string) {
-	c.SubKind = sk
-}
-
-// GetResourceID returns resource ID
-func (c *StaticTokensV2) GetResourceID() int64 {
-	return c.Metadata.ID
-}
-
-// SetResourceID sets resource ID
-func (c *StaticTokensV2) SetResourceID(id int64) {
-	c.Metadata.ID = id
-}
-
-// GetName returns the name of the StaticTokens resource.
-func (c *StaticTokensV2) GetName() string {
-	return c.Metadata.Name
-}
-
-// SetName sets the name of the StaticTokens resource.
-func (c *StaticTokensV2) SetName(e string) {
-	c.Metadata.Name = e
-}
-
-// Expires returns object expiry setting
-func (c *StaticTokensV2) Expiry() time.Time {
-	return c.Metadata.Expiry()
-}
-
-// SetExpiry sets expiry time for the object
-func (c *StaticTokensV2) SetExpiry(expires time.Time) {
-	c.Metadata.SetExpiry(expires)
-}
-
-// SetTTL sets Expires header using realtime clock
-func (c *StaticTokensV2) SetTTL(clock clockwork.Clock, ttl time.Duration) {
-	c.Metadata.SetTTL(clock, ttl)
-}
-
-// GetMetadata returns object metadata
-func (c *StaticTokensV2) GetMetadata() Metadata {
-	return c.Metadata
-}
-
-// SetStaticTokens sets the list of static tokens used to provision nodes.
-func (c *StaticTokensV2) SetStaticTokens(s []ProvisionToken) {
-	c.Spec.StaticTokens = ProvisionTokensToV1(s)
-}
-
-// GetStaticTokens gets the list of static tokens used to provision nodes.
-func (c *StaticTokensV2) GetStaticTokens() []ProvisionToken {
-	return ProvisionTokensFromV1(c.Spec.StaticTokens)
-}
-
-// CheckAndSetDefaults checks validity of all parameters and sets defaults.
-func (c *StaticTokensV2) CheckAndSetDefaults() error {
-	// make sure we have defaults for all metadata fields
-	err := c.Metadata.CheckAndSetDefaults()
-	if err != nil {
-		return trace.Wrap(err)
-	}
-
-	return nil
-}
-
-// String represents a human readable version of static provisioning tokens.
-func (c *StaticTokensV2) String() string {
-	return fmt.Sprintf("StaticTokens(%v)", c.Spec.StaticTokens)
-}
-
-// StaticTokensSpecSchemaTemplate is a template for StaticTokens schema.
-const StaticTokensSpecSchemaTemplate = `{
-  "type": "object",
-  "additionalProperties": false,
-  "properties": {
-	"static_tokens": {
-		"type": "array",
-		"items": {
-			"type": "object",
-			"additionalProperties": false,
-			"properties": {
-				"expires": {
-					"type": "string"
-				},
-				"roles": {
-					"type": "array",
-					"items": {
-						"type": "string"
-					}
-				},
-				"token": {
-					"type": "string"
-				}
-			}
-		}
-	}%v
-  }
-}`
-
-// GetStaticTokensSchema returns the schema with optionally injected
-// schema for extensions.
-func GetStaticTokensSchema(extensionSchema string) string {
-	var staticTokensSchema string
-	if staticTokensSchema == "" {
-		staticTokensSchema = fmt.Sprintf(StaticTokensSpecSchemaTemplate, "")
-	} else {
-		staticTokensSchema = fmt.Sprintf(StaticTokensSpecSchemaTemplate, ","+extensionSchema)
-	}
-	return fmt.Sprintf(V2SchemaTemplate, MetadataSchema, staticTokensSchema, DefaultDefinitions)
 }
 
 // StaticTokensMarshaler implements marshal/unmarshal of StaticTokens implementations

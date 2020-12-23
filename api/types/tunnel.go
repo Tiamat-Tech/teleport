@@ -22,8 +22,7 @@ import (
 	"time"
 
 	"github.com/gravitational/teleport/api/constants"
-	"github.com/gravitational/teleport/lib/defaults"
-	"github.com/gravitational/teleport/lib/utils"
+
 	"github.com/gravitational/trace"
 	"github.com/jonboulle/clockwork"
 )
@@ -165,7 +164,7 @@ func (r *ReverseTunnelV1) V2() *ReverseTunnelV2 {
 		Version: constants.V2,
 		Metadata: Metadata{
 			Name:      r.DomainName,
-			Namespace: defaults.Namespace,
+			Namespace: constants.Namespace,
 		},
 		Spec: ReverseTunnelSpecV2{
 			ClusterName: r.DomainName,
@@ -189,8 +188,7 @@ func (r *ReverseTunnelV2) Check() error {
 	}
 
 	for _, addr := range r.Spec.DialAddrs {
-		_, err := utils.ParseAddr(addr)
-		if err != nil {
+		if err := CheckParseAddr(addr); err != nil {
 			return trace.Wrap(err)
 		}
 	}

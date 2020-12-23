@@ -22,6 +22,8 @@ type Duration = types.Duration
 
 type Event = types.Event
 
+type ExternalIdentity = types.ExternalIdentity
+
 type PluginData = types.PluginData
 type PluginDataV3 = types.PluginDataV3
 type PluginDataSpecV3 = types.PluginDataSpecV3
@@ -55,6 +57,9 @@ type Labels = types.Labels
 
 type Rotation = types.Rotation
 
+type StaticTokensSpecV2 = types.StaticTokensSpecV2
+type StaticTokensV2 = types.StaticTokensV2
+
 type TunnelConnection = types.TunnelConnection
 type TunnelConnectionV2 = types.TunnelConnectionV2
 type TunnelConnectionSpecV2 = types.TunnelConnectionSpecV2
@@ -63,8 +68,10 @@ type RoleMapping = types.RoleMapping
 
 type UserV2 = types.UserV2
 type UserSpecV2 = types.UserSpecV2
+type ConnectorRef = types.ConnectorRef
 
 type WebSessionV2 = types.WebSessionV2
+type WebSessionV1 = types.WebSessionV1
 type WebSessionSpecV2 = types.WebSessionSpecV2
 
 // Some functions and variables also need to be imported from the types package
@@ -73,11 +80,16 @@ var (
 	NewBoolOption = types.NewBoolOption
 	NewPluginData = types.NewPluginData
 
-	GetAccessRequestSchema    = types.GetAccessRequestSchema
-	GetReverseTunnelSchema    = types.GetReverseTunnelSchema
-	V2SchemaTemplate          = types.V2SchemaTemplate
-	DefaultDefinitions        = types.DefaultDefinitions
-	GetTunnelConnectionSchema = types.GetTunnelConnectionSchema
+	GetAccessRequestSchema            = types.GetAccessRequestSchema
+	GetReverseTunnelSchema            = types.GetReverseTunnelSchema
+	V2SchemaTemplate                  = types.V2SchemaTemplate
+	DefaultDefinitions                = types.DefaultDefinitions
+	GetTunnelConnectionSchema         = types.GetTunnelConnectionSchema
+	GetUserSchema                     = types.GetUserSchema
+	ExternalIdentitySchema            = types.ExternalIdentitySchema
+	GetStaticTokensSchema             = types.GetStaticTokensSchema
+	GetWebSessionSchema               = types.GetWebSessionSchema
+	GetWebSessionSchemaWithExtensions = types.GetWebSessionSchemaWithExtensions
 
 	MaxDuration           = types.MaxDuration
 	NewDuration           = types.NewDuration

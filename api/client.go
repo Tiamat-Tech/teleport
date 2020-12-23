@@ -27,9 +27,9 @@ import (
 	"time"
 
 	"github.com/gravitational/teleport"
+	"github.com/gravitational/teleport/api/constants"
 	"github.com/gravitational/teleport/api/proto"
 	"github.com/gravitational/teleport/api/types"
-	"github.com/gravitational/teleport/lib/defaults"
 	"github.com/gravitational/teleport/lib/events"
 	"github.com/gravitational/teleport/lib/jwt"
 
@@ -130,13 +130,13 @@ func (c *Config) CheckAndSetDefaults() error {
 		return trace.BadParameter("missing parameter TLS")
 	}
 	if c.KeepAlivePeriod == 0 {
-		c.KeepAlivePeriod = defaults.ServerKeepAliveTTL
+		c.KeepAlivePeriod = constants.ServerKeepAliveTTL
 	}
 	if c.KeepAliveCount == 0 {
-		c.KeepAliveCount = defaults.KeepAliveCountMax
+		c.KeepAliveCount = constants.KeepAliveCountMax
 	}
 	if c.DialTimeout == 0 {
-		c.DialTimeout = defaults.DefaultDialTimeout
+		c.DialTimeout = constants.DefaultDialTimeout
 	}
 	if c.Dialer == nil {
 		var err error
