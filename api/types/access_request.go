@@ -20,10 +20,31 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/gravitational/teleport/api/constants"
 	"github.com/gravitational/trace"
 	"github.com/jonboulle/clockwork"
 	"github.com/pborman/uuid"
 )
+
+// NewAccessRequest assembled an AccessReqeust resource.
+func NewAccessRequest(user string, roles ...string) (AccessRequest, error) {
+	req := AccessRequestV3{
+		Kind:    constants.KindAccessRequest,
+		Version: constants.V3,
+		Metadata: Metadata{
+			Name: uuid.New(),
+		},
+		Spec: AccessRequestSpecV3{
+			User:  user,
+			Roles: roles,
+			State: RequestState_PENDING,
+		},
+	}
+	if err := req.CheckAndSetDefaults(); err != nil {
+		return nil, trace.Wrap(err)
+	}
+	return &req, nil
+}
 
 // AccessRequest is a request for temporarily granted roles
 type AccessRequest interface {
@@ -374,4 +395,27 @@ func (f *AccessRequestFilter) Match(req AccessRequest) bool {
 
 func (f *AccessRequestFilter) Equals(o AccessRequestFilter) bool {
 	return f.ID == o.ID && f.User == o.User && f.State == o.State
+}
+
+const AccessRequestSpecSchema = `{
+	"type": "object",
+	"additionalProperties": false,
+	"properties": {
+		"user": { "type": "string" },
+		"roles": {
+			"type": "array",
+			"items": { "type": "string" }
+		},
+		"state": { "type": "integer" },
+		"created": { "type": "string" },
+		"expires": { "type": "string" },
+		"request_reason": { "type": "string" },
+		"resolve_reason": { "type": "string" },
+		"resolve_annotations": { "type": "object" },
+		"system_annotations": { "type": "object" }
+	}
+}`
+
+func GetAccessRequestSchema() string {
+	return fmt.Sprintf(V2SchemaTemplate, MetadataSchema, AccessRequestSpecSchema, DefaultDefinitions)
 }

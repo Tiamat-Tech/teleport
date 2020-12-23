@@ -18,7 +18,6 @@ package services
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/gravitational/teleport/lib/utils"
 	"github.com/gravitational/teleport/lib/utils/parse"
@@ -175,27 +174,8 @@ func GetAccessRequest(ctx context.Context, acc DynamicAccess, reqID string) (Acc
 	return reqs[0], nil
 }
 
-// NewAccessRequest assembled an AccessReqeust resource.
-func NewAccessRequest(user string, roles ...string) (AccessRequest, error) {
-	req := AccessRequestV3{
-		Kind:    KindAccessRequest,
-		Version: V3,
-		Metadata: Metadata{
-			Name: uuid.New(),
-		},
-		Spec: AccessRequestSpecV3{
-			User:  user,
-			Roles: roles,
-			State: RequestState_PENDING,
-		},
-	}
-	if err := req.CheckAndSetDefaults(); err != nil {
-		return nil, trace.Wrap(err)
-	}
-	return &req, nil
-}
-
-func (c AccessRequestConditions) GetTraitMappings() TraitMappingSet {
+// GetTraitMappings gets the AccessRequestConditions' claims as a TraitMappingsSet
+func GetTraitMappings(c AccessRequestConditions) TraitMappingSet {
 	tm := make([]TraitMapping, 0, len(c.ClaimsToRoles))
 	for _, mapping := range c.ClaimsToRoles {
 		tm = append(tm, TraitMapping{
@@ -227,7 +207,7 @@ func appendRoleMatchers(matchers []parse.Matcher, conditions AccessRequestCondit
 	}
 
 	// build matchers for all role mappings
-	ms, err := conditions.GetTraitMappings().TraitsToRoleMatchers(traits)
+	ms, err := GetTraitMappings(conditions).TraitsToRoleMatchers(traits)
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
@@ -519,27 +499,4 @@ func GetAccessRequestMarshaler() AccessRequestMarshaler {
 	marshalerMutex.Lock()
 	defer marshalerMutex.Unlock()
 	return accessRequestMarshalerInstance
-}
-
-const AccessRequestSpecSchema = `{
-	"type": "object",
-	"additionalProperties": false,
-	"properties": {
-		"user": { "type": "string" },
-		"roles": {
-			"type": "array",
-			"items": { "type": "string" }
-		},
-		"state": { "type": "integer" },
-		"created": { "type": "string" },
-		"expires": { "type": "string" },
-		"request_reason": { "type": "string" },
-		"resolve_reason": { "type": "string" },
-		"resolve_annotations": { "type": "object" },
-		"system_annotations": { "type": "object" }
-	}
-}`
-
-func GetAccessRequestSchema() string {
-	return fmt.Sprintf(V2SchemaTemplate, MetadataSchema, AccessRequestSpecSchema, DefaultDefinitions)
 }

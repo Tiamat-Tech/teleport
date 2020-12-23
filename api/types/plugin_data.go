@@ -20,9 +20,33 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/gravitational/teleport/api/constants"
 	"github.com/gravitational/trace"
 	"github.com/jonboulle/clockwork"
 )
+
+// NewPluginData configures a new PluginData instance associated
+// with the supplied resource name (currently, this must be the
+// name of an access request).
+func NewPluginData(resourceName string, resourceKind string) (PluginData, error) {
+	data := PluginDataV3{
+		Kind:    constants.KindPluginData,
+		Version: constants.V3,
+		// If additional resource kinds become supported, make
+		// this a parameter.
+		SubKind: resourceKind,
+		Metadata: Metadata{
+			Name: resourceName,
+		},
+		Spec: PluginDataSpecV3{
+			Entries: make(map[string]*PluginDataEntry),
+		},
+	}
+	if err := data.CheckAndSetDefaults(); err != nil {
+		return nil, err
+	}
+	return &data, nil
+}
 
 // PluginData is used by plugins to store per-resource state.  An instance of PluginData
 // corresponds to a resource which may be managed by one or more plugins.  Data is stored

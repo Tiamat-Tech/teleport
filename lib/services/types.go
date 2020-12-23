@@ -13,7 +13,7 @@ type AccessRequest = types.AccessRequest
 type AccessRequestV3 = types.AccessRequestV3
 type AccessRequestSpecV3 = types.AccessRequestSpecV3
 type AccessRequestFilter = types.AccessRequestFilter
-type AccessRequestConditions struct{ types.AccessRequestConditions }
+type AccessRequestConditions = types.AccessRequestConditions
 type RequestState = types.RequestState
 
 type App = types.App
@@ -29,14 +29,14 @@ type PluginDataFilter = types.PluginDataFilter
 type PluginDataEntry = types.PluginDataEntry
 type PluginDataUpdateParams = types.PluginDataUpdateParams
 
-type ProvisionTokenV1 struct{ types.ProvisionTokenV1 }
-type ProvisionTokenV2 struct{ types.ProvisionTokenV2 }
+type ProvisionTokenV1 = types.ProvisionTokenV1
+type ProvisionTokenV2 = types.ProvisionTokenV2
 type ProvisionTokenSpecV2 = types.ProvisionTokenSpecV2
 
-type RemoteClusterV3 struct{ types.RemoteClusterV3 }
+type RemoteClusterV3 = types.RemoteClusterV3
 
 type Resource = types.Resource
-type ResourceHeader struct{ types.ResourceHeader }
+type ResourceHeader = types.ResourceHeader
 type Metadata = types.Metadata
 
 type ReverseTunnelV1 = types.ReverseTunnelV1
@@ -53,19 +53,31 @@ type RoleOptions = types.RoleOptions
 type Rule = types.Rule
 type Labels = types.Labels
 
+type Rotation = types.Rotation
+
+type TunnelConnection = types.TunnelConnection
+type TunnelConnectionV2 = types.TunnelConnectionV2
+type TunnelConnectionSpecV2 = types.TunnelConnectionSpecV2
+type ClusterNameSpecV2 = types.ClusterNameSpecV2
 type RoleMapping = types.RoleMapping
 
-type WebSessionV2 struct{ types.WebSessionV2 }
+type UserV2 = types.UserV2
+type UserSpecV2 = types.UserSpecV2
+
+type WebSessionV2 = types.WebSessionV2
 type WebSessionSpecV2 = types.WebSessionSpecV2
 
 // Some functions and variables also need to be imported from the types package
 var (
 	NewRule       = types.NewRule
 	NewBoolOption = types.NewBoolOption
+	NewPluginData = types.NewPluginData
 
-	GetReverseTunnelSchema = types.GetReverseTunnelSchema
-	V2SchemaTemplate       = types.V2SchemaTemplate
-	DefaultDefinitions     = types.DefaultDefinitions
+	GetAccessRequestSchema    = types.GetAccessRequestSchema
+	GetReverseTunnelSchema    = types.GetReverseTunnelSchema
+	V2SchemaTemplate          = types.V2SchemaTemplate
+	DefaultDefinitions        = types.DefaultDefinitions
+	GetTunnelConnectionSchema = types.GetTunnelConnectionSchema
 
 	MaxDuration           = types.MaxDuration
 	NewDuration           = types.NewDuration

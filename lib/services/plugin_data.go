@@ -24,29 +24,6 @@ import (
 	"github.com/gravitational/trace"
 )
 
-// NewPluginData configures a new PluginData instance associated
-// with the supplied resource name (currently, this must be the
-// name of an access request).
-func NewPluginData(resourceName string, resourceKind string) (PluginData, error) {
-	data := PluginDataV3{
-		Kind:    KindPluginData,
-		Version: V3,
-		// If additional resource kinds become supported, make
-		// this a parameter.
-		SubKind: resourceKind,
-		Metadata: Metadata{
-			Name: resourceName,
-		},
-		Spec: PluginDataSpecV3{
-			Entries: make(map[string]*PluginDataEntry),
-		},
-	}
-	if err := data.CheckAndSetDefaults(); err != nil {
-		return nil, err
-	}
-	return &data, nil
-}
-
 type PluginDataMarshaler interface {
 	MarshalPluginData(req PluginData, opts ...MarshalOption) ([]byte, error)
 	UnmarshalPluginData(bytes []byte, opts ...MarshalOption) (PluginData, error)
