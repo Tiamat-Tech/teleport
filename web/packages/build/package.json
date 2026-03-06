@@ -25,7 +25,7 @@
     "eslint-plugin-jest-dom": "^5.5.0",
     "eslint-plugin-react": "^7.37.5",
     "eslint-plugin-react-hooks": "7.0.1",
-    "eslint-plugin-storybook": "^10.2.14",
+    "eslint-plugin-storybook": "^10.2.15",
     "eslint-plugin-testing-library": "7.16.0",
     "eslint-plugin-unused-imports": "^4.4.1",
     "globals": "^17.4.0",
